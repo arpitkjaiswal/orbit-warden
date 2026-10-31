@@ -42,6 +42,20 @@ The included `render.yaml` defines a **Render Static Site** that publishes `./we
 
 **Do not run the Pygame desktop window as a Render Python web service**; desktop GUI apps are not browser pages. The browser edition is a JavaScript port sharing the same gameplay concepts.
 
+## Troubleshooting an existing Render Python Web Service
+
+If you already created a **Python Web Service** instead of a Static Site, you can deploy the browser edition without installing Python dependencies. In **Render Dashboard → your service → Settings**, change:
+
+| Field | Value |
+| --- | --- |
+| Root Directory | Leave empty |
+| Build Command | `echo "Build complete"` |
+| Start Command | `python -m http.server ${PORT:-10000} --bind 0.0.0.0 --directory web` |
+
+Save the settings, then choose **Manual Deploy → Clear build cache & deploy**. This uses Python's built-in HTTP server and binds to Render's `PORT` on `0.0.0.0`, so it requires **no additional Python packages**. The existing `requirements.txt` is strictly for the desktop Pygame edition.
+
+If the build reports `sdl2-config: not found` or `Unable to run "sdl-config"`, the build is still executing `pip install -r requirements.txt`. Remove that build step instead of installing SDL or changing the Pygame dependency. A Static Site remains the preferred deployment method.
+
 ## Run the Pygame desktop edition
 
 ```sh
