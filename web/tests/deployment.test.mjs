@@ -17,3 +17,7 @@ test('Render config publishes browser assets rather than Pygame desktop runtime'
   assert.match(yaml, /runtime:\s*static/);
   assert.match(yaml, /staticPublishPath:\s*\.\/web/);
 });
+test('release manifest agrees with the visible game version', () => {
+  const manifest=JSON.parse(read('../version.json'));
+  assert.ok(read('../index.html').includes(`class="build">v${manifest.version}</span>`));
+});

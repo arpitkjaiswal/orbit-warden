@@ -13,7 +13,7 @@ const {chromium}=require('playwright');const fs=require('node:fs');const path=re
  const baseURL=`http://127.0.0.1:${server.address().port}`;let browser;
  try{
  browser=await chromium.launch({...(process.env.CHROMIUM_PATH?{executablePath:process.env.CHROMIUM_PATH}:fs.existsSync('/usr/bin/chromium')?{executablePath:'/usr/bin/chromium'}:{}),headless:true,args:['--no-sandbox']});const page=await browser.newPage({viewport:{width:1440,height:1100}});const errors=[];page.on('pageerror',e=>errors.push(e.message));
- await page.addInitScript(()=>{requestAnimationFrame=()=>0;});await page.goto(baseURL);await page.evaluate(async()=>{window.game=(await import('/main.js')).game;});await page.selectOption('#ship-choice','bastion');await page.click('#start-button');
+ await page.addInitScript(()=>{requestAnimationFrame=()=>0;});await page.goto(baseURL);await page.evaluate(async()=>{window.game=(await import('/main.js')).game;});await page.locator('.mission-options>summary').click();await page.selectOption('#ship-choice','bastion');await page.click('#start-button');
  await page.evaluate(()=>{
  const g=game;g.running=false;g.paused=false;g.beginPractice();
  document.getElementById('touch-fire').dispatchEvent(new PointerEvent('pointerdown',{pointerId:100}));
@@ -81,6 +81,16 @@ const {chromium}=require('playwright');const fs=require('node:fs');const path=re
   await layout.click('#start-button');
  }
  assert.deepEqual(layoutErrors,[]);console.log('PASS: six cockpit viewports, unique controls and launch buttons');
+ const welcome=await browser.newPage({viewport:{width:390,height:844},hasTouch:true});const welcomeErrors=[];welcome.on('pageerror',e=>welcomeErrors.push(e.message));await welcome.goto(baseURL);
+ assert.equal(await welcome.locator('.mission-options').evaluate(node=>node.open),false,'advanced options start collapsed');
+ assert.ok((await welcome.locator('#start-button').innerText()).includes('Play now'));
+ await welcome.click('#practice-start-button');assert.equal(await welcome.evaluate(async()=>{const {game}=await import('/main.js');return game.practicing&&!game.running;}),true,'safe practice before combat');
+ await welcome.click('#practice-control');assert.equal(await welcome.locator('#overlay').isVisible(),true,'return to start');
+ await welcome.click('#start-button');await welcome.click('#pause-button');assert.equal(await welcome.evaluate(async()=>(await import('/main.js')).game.paused),true,'visible pause');
+ await welcome.click('#pause-button');assert.equal(await welcome.evaluate(async()=>(await import('/main.js')).game.paused),false,'visible resume');
+ await welcome.click('#restart-button');assert.equal(await welcome.evaluate(async()=>(await import('/main.js')).game.state.score),0,'visible restart');
+ const touchOnScreen=await welcome.locator('#touch-fire').evaluate(node=>{const r=node.getBoundingClientRect();return r.top>=0&&r.bottom<=innerHeight;});assert.ok(touchOnScreen,'touch fire visible alongside game');
+ assert.deepEqual(welcomeErrors,[]);console.log('PASS: first-time play, optional setup, safe camera practice, visible pause/resume/restart and on-screen touch');
  const live=await browser.newPage();const liveErrors=[];live.on('pageerror',e=>liveErrors.push(e.message));await live.goto(baseURL);await live.click('#start-button');await live.waitForTimeout(1200);assert.deepEqual(liveErrors,[]);
  }finally{if(browser)await browser.close();await new Promise(resolve=>server.close(resolve));}
 })().catch(e=>{console.error(e);process.exit(1)});

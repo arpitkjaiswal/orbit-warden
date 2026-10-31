@@ -1,4 +1,4 @@
-import {classifyHand, validLandmarks, HandSteering, PoseFilter} from './gesture-logic.js';
+import {classifyHand, validLandmarks, POSE_NAMES, HandSteering, PoseFilter} from './gesture-logic.js';
 /** Webcam-only, opt-in gesture tracking via MediaPipe Tasks Vision.
  * No images are uploaded by this application. MediaPipe may make its own telemetry requests.
  * User-provided trained classifiers have not been bundled.
@@ -6,6 +6,13 @@ import {classifyHand, validLandmarks, HandSteering, PoseFilter} from './gesture-
 const CDN = 'https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@1.2.0';
 const DEFAULT_MODEL = 'https://storage.googleapis.com/mediapipe-models/hand_landmarker/hand_landmarker/float16/1/hand_landmarker.task';
 const SEGMENTS = [[0,1],[1,2],[2,3],[3,4],[0,5],[5,6],[6,7],[7,8],[5,9],[9,10],[10,11],[11,12],[9,13],[13,14],[14,15],[15,16],[13,17],[17,18],[18,19],[19,20],[0,17]];
+
+export function cameraErrorMessage(error){
+  if(['NotAllowedError','PermissionDeniedError','SecurityError'].includes(error?.name))return 'Permission denied. Allow camera access in your browser settings, or use keyboard and touch.';
+  if(['NotFoundError','DevicesNotFoundError'].includes(error?.name))return 'No camera found. Connect a camera and try again, or use keyboard and touch.';
+  if(['NotReadableError','TrackStartError'].includes(error?.name))return 'The camera is busy. Close other apps using it, then try again.';
+  return 'Hand controls could not start. Check your connection and try again. Keyboard and touch still work.';
+}
 
 async function createLandmarker(){
   const {FilesetResolver,HandLandmarker}=await import(`${CDN}/+esm`);
@@ -44,7 +51,7 @@ export class GestureTracker {
     this.lastInference = 0;
     this.lastHandsSeen = 0;
     this.generation = 0;
-    this.labelEl.textContent = 'NONE';
+    this.labelEl.textContent='No hand';
     this.button.addEventListener('click', () => this.toggle());
   }
 
@@ -59,7 +66,7 @@ export class GestureTracker {
     this.loading = true;
     const generation = ++this.generation;
     this.statusEl.textContent = 'Requesting webcam permission and loading MediaPipe…';
-    this.button.textContent='CANCEL CAMERA STARTUP';
+    this.button.textContent='Cancel startup';
     this.button.disabled = false;
     try {
       const stream = await navigator.mediaDevices.getUserMedia({video: {width: 640, height: 360, facingMode: 'user'}, audio: false});
@@ -77,11 +84,11 @@ export class GestureTracker {
       this.enabled = true;
       this.placeholder.classList.add('hidden');
       this.feedLabelEl.textContent = 'LIVE · ON DEVICE';
-      this.button.innerHTML = 'DISABLE CAMERA CONTROL <span>×</span>';
+      this.button.textContent='Stop camera';
       this.statusEl.textContent = 'Camera ready. Center your hand; choose Relaxed or Free flight under Tune controls. Fist: shield; palm: recharge; pinch: overdrive; peace sign: nova; three fingers: missiles.';
     } catch (err) {
       if(generation!==this.generation)return;
-      this.fail(`Camera unavailable: ${err?.message || 'permission denied or model unavailable'}`);
+      this.lastError=err?.message||'';this.fail(cameraErrorMessage(err));
     } finally {
       if(generation===this.generation || !this.loading){this.loading = false;this.button.disabled = false;}
     }
@@ -113,10 +120,10 @@ export class GestureTracker {
     this.history = [];
     this.label = 'none';
     this.confidence = 0;
-    this.labelEl.textContent = 'NONE';
+    this.labelEl.textContent='No hand';
     this.confidenceEl.textContent = '—';
-    this.feedLabelEl.textContent = 'NO FEED';
-    this.button.innerHTML = 'ENABLE CAMERA CONTROL <span>↗</span>';
+    this.feedLabelEl.textContent='Not connected';
+    this.button.textContent='Enable camera';
     this.statusEl.textContent = 'Camera is off. Keyboard controls are always available.';
   }
 
@@ -133,7 +140,7 @@ export class GestureTracker {
   push(label,dt=.04) {
     this.label=this.poseFilter.update(label,dt);
     this.confidence=this.poseFilter.confidence;
-    this.labelEl.textContent=this.label==='none'?'READING…':this.label.toUpperCase();
+    this.labelEl.textContent=POSE_NAMES[this.label]||'Reading your hand';
     this.confidenceEl.textContent=`${Math.round(this.confidence*100)}%`;
   }
 
@@ -155,7 +162,7 @@ export class GestureTracker {
     this.lastInference = now;
     let hands;
     try { hands = this.landmarker.detectForVideo(this.video, now).landmarks; }
-    catch (err) {this.fail(`Tracking error: ${err.message}. Use keyboard or retry camera.`); return;}
+    catch (err) {this.lastError=err?.message||'';this.fail('Hand tracking stopped. Try enabling the camera again, or continue with keyboard and touch.'); return;}
     const points = hands?.[0];
     this.syncOverlaySize();
     if (!validLandmarks(points)) {

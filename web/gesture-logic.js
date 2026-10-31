@@ -73,3 +73,5 @@ export class HandSteering {
     return this.position;
   }
 }
+
+export const POSE_NAMES=Object.freeze({none:'Reading your hand',fire:'Firing',shield:'Shielding',recharge:'Recharging',move:'Steering',overdrive:'Hold pinch for overdrive',nova:'Hold peace sign for nova',missiles:'Hold three fingers for missiles'});

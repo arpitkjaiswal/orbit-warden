@@ -2,7 +2,7 @@ import {InputState} from './input.js';
 import {SHIPS, UPGRADES, newLoadout, applyUpgrade, upgradeChoices, bossVolley, BADGES, readBadges} from './adventure.js';
 import {Feedback} from './feedback.js';
 import {WIDTH, HEIGHT, ENEMY_TYPES, clamp, collision, difficultyAt, damage, freshState, chooseEnemy, moveEnemy, SECTORS, WEAPONS, collectSalvage, canActivate, FLIGHT_MODES, sweptCollision, firstCollision, assistedTarget} from './logic.js';
-import {GesturePower} from './gesture-logic.js';
+import {GesturePower, POSE_NAMES} from './gesture-logic.js';
 import {GestureTracker} from './gestures.js';
 
 const $ = (id) => document.getElementById(id);
@@ -19,7 +19,7 @@ export class OrbitWarden {
     this.controls=new InputState();this.input=this.controls.held;
     this.stars = Array.from({length: 180}, () => ({ x: Math.random()*WIDTH, y: Math.random()*HEIGHT, r: random(.5,2), speed: random(.15, 1.0), light: random(.15,.8) }));
     this.gestures = new GestureTracker({video:$('camera'), overlay:$('hand-overlay'), placeholder:$('camera-placeholder'), button:$('gesture-toggle'), label:$('gesture-name'), confidence:$('gesture-confidence'), status:$('gesture-status'), feedLabel:$('camera-label'),onFailure:message=>{
-      if(this.running&&!this.refitting&&!this.practicing){this.pause();this.showOverlay('CAMERA DISCONNECTED',message+' Use keyboard/touch, or enable the camera again.','RESUME MISSION','PILOT SAFETY','CAMERA INPUT HAS BEEN RELEASED');}
+      if(this.running&&!this.refitting&&!this.practicing){this.pause();this.showOverlay('Camera unavailable',message,'Continue with keyboard','YOUR MISSION IS PAUSED','You can turn the camera on again whenever you like.');}
     }});
     this.gesturePower=new GesturePower();
     this.feedback=new Feedback();
@@ -40,6 +40,9 @@ export class OrbitWarden {
     $('hand-reach').addEventListener('input',()=>{this.gestures.steering.sensitivity=Number($('hand-reach').value);$('reach-value').textContent=`${$('hand-reach').value}×`;});
     $('hand-smoothing').addEventListener('input',()=>{this.gestures.steering.smoothing=Number($('hand-smoothing').value);});
     $('sound-enabled').addEventListener('change',async()=>{await this.feedback.enable($('sound-enabled').checked);$('sound-enabled').checked=this.feedback.enabled;});
+    $('pause-button').addEventListener('click',()=>this.togglePause());
+    $('restart-button').addEventListener('click',()=>this.start());
+    $('practice-start-button').addEventListener('click',()=>{this.beginPractice();this.gestures.statusEl.textContent='1. Enable camera. 2. Center your hand. 3. Move to practice safely.';});
     $('practice-control').addEventListener('click',()=>this.practicing?this.endPractice():this.beginPractice());
     this.renderBadges();
     this.updateHud();
@@ -235,7 +238,7 @@ export class OrbitWarden {
   endPractice(){
     this.practicing=false;
     if(this.running)this.resume();
-    else this.showOverlay('DEFEND THE ORBIT.','Your controls are tuned. Start a mission when ready.','INITIATE DEFENSE','PILOT READY','ARROWS / WASD TO MOVE · SPACE TO FIRE');
+    else this.showOverlay('Ready to fly?','Your controls are tuned. Move with arrows or WASD and hold Space to fire.','Play now','READY WHEN YOU ARE','Keyboard, touch, or camera — play your way');
   }
   steerPlayer(player,dt,camera){
     const dx=Number(this.input.has('ArrowRight')||this.input.has('KeyD'))-Number(this.input.has('ArrowLeft')||this.input.has('KeyA'));
@@ -255,7 +258,7 @@ export class OrbitWarden {
     this.feedback.play('hit');this.announce(this.state.hp===1?'HULL CRITICAL · COLLECT REPAIR SALVAGE':'HULL HIT · SHIELD OR DASH TO EVADE');
     if(this.state.over)this.gameOver();
   }
-  pause() {if (!this.running || this.paused || this.refitting) return;this.paused=true;this.controls.clear();this.gesturePower.reset();this.showOverlay('PAUSED', 'Take a moment. Your sector is secure for now.', 'RESUME MISSION', 'MISSION SUSPENDED', 'P TO RESUME · R TO RESTART');}
+  pause() {if (!this.running || this.paused || this.refitting) return;this.paused=true;this.controls.clear();this.gesturePower.reset();this.showOverlay('Paused', 'Your progress is safe. Resume whenever you’re ready.', 'Resume game', 'TAKE A BREATHER', 'P to resume · R to restart');}
   resume() {if(!this.paused||this.refitting)return;this.paused=false;$('overlay').classList.add('hidden');this.canvas.focus({preventScroll:true});}
   togglePause() {if(this.practicing)return;if (this.paused) this.resume(); else this.pause();}
   gameOver() {
@@ -270,6 +273,7 @@ export class OrbitWarden {
     $('start-button').innerHTML = `${button} <span>→</span>`;
     $('overlay-eyebrow').textContent=eyebrow;
     $('overlay-hint').textContent=hint;
+    $('practice-start-button').hidden=this.running||this.state.over||title==='GALAXY SAVED';
     $('overlay').classList.remove('hidden');
     $('start-button').focus({preventScroll:true});
   }
@@ -502,6 +506,9 @@ export class OrbitWarden {
 
   updateHud(){
     const s=this.state;
+    $('pause-button').disabled=!this.running||this.refitting||this.practicing;
+    $('pause-button').textContent=this.paused?'Resume':'Pause';
+    $('restart-button').disabled=(!this.running&&!this.state.over)||this.refitting||this.practicing;
     $('flight-difficulty').disabled=this.running;$('ship-choice').disabled=this.running;$('practice-control').disabled=this.refitting;
     $('missile-action').disabled=!this.running||this.paused||this.mods.missiles===0||this.missileCooldown>0;
     $('missile-action').textContent=`C · MISSILES ${this.mods.missiles}${this.missileCooldown>0?' · '+Math.ceil(this.missileCooldown)+'s':''}`;
@@ -509,7 +516,7 @@ export class OrbitWarden {
     $('combo-readout').textContent=this.combo>0?`${this.combo} CHAIN · ×${Math.min(5,1+Math.floor(this.combo/5))}`:'BUILD A KILL CHAIN';
     $('combo-fill').style.width=`${this.comboTime/3*100}%`;
     $('hold-fill').style.width=`${(this.practicing?this.practicePower:this.gesturePower).progress*100}%`;
-    $('practice-control').textContent=this.practicing?'EXIT CONTROL LAB ↗':'CONTROL LAB ↗';
+    $('practice-control').textContent=this.practicing?(this.running?'Back to game':'Back to start'):'Practice controls';
     $('sector-name').textContent=`${this.sector+1} / 3 · ${SECTORS[this.sector].name}`;
     $('mission-objective').textContent=this.refitting?'SECTOR SECURED · CHOOSE A REFIT':this.practicing?'CONTROL LAB · YOUR MISSION IS SAFE':this.bossSpawned?`Defeat ${SECTORS[this.sector].boss}`:`Survive to commander arrival · ${Math.max(0,Math.ceil(30-this.sectorTime))}s`;
     $('loadout').textContent=`${WEAPONS[this.weapon].name} MK ${this.upgrade+1} · ${this.kills} kills`;
@@ -518,7 +525,7 @@ export class OrbitWarden {
     for(const button of document.querySelectorAll('[data-weapon]'))button.setAttribute('aria-pressed',String(button.dataset.weapon===this.weapon));
     $('overdrive-action').textContent=this.overdrive>0?`Z · OVERDRIVE ${Math.ceil(this.overdrive)}s`:`Z · OVERDRIVE ${this.overdriveCooldown>0?Math.ceil(this.overdriveCooldown)+'s':'READY'}`;
     const displayedPower=this.practicing?this.practicePower:this.gesturePower;
-    $('power-status').textContent=this.gestures.enabled?(this.gestures.tracking?`HAND LINKED · ${this.gestures.label.toUpperCase()}${displayedPower.progress>0?' · '+Math.round(displayedPower.progress*100)+'%':''}`:'SHOW YOUR HAND · POWERS SAFE'):'CAMERA OFF · KEYBOARD READY';
+    $('power-status').textContent=this.gestures.enabled?(this.gestures.tracking?`${POSE_NAMES[this.gestures.label]||'Reading your hand'}${displayedPower.progress>0?' · '+Math.round(displayedPower.progress*100)+'%':''}`:'Show your hand to begin'):'Camera off · keyboard and touch ready';
     $('score').textContent=String(s.score).padStart(6,'0');
     $('timer').textContent=prettifyTime(s.elapsed);
     $('difficulty').textContent=`${(difficultyAt(s.elapsed)*this.tuning.speed).toFixed(1)}×`;

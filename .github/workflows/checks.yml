@@ -2,6 +2,9 @@ name: Game checks
 on:
   push:
   pull_request:
+concurrency:
+  group: checks-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
 jobs:
   test:
     runs-on: ubuntu-latest
@@ -28,3 +31,18 @@ jobs:
           node --check web/feedback.js
           node --check web/adventure.js
           node --check web/input.js
+  verify-deployment:
+    name: Verify public Render release
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    needs: test
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Wait for the exact game release on Render
+        run: python scripts/verify_deployment.py --wait 600 --interval 15 --timeout 15

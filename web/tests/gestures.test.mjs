@@ -108,3 +108,11 @@ test('a disconnected camera releases resources and reports the failure to the ga
   assert.equal(t.enabled,false);assert.equal(stopped,1);assert.match(failure,/stream ended/);assert.equal(t.label,'none');assert.equal(t.stream,null);
  }finally{if(original)Object.defineProperty(globalThis,'navigator',original);else delete globalThis.navigator;}
 });
+test('camera failures explain the action a player can take without exposing technical errors',async()=>{
+ const {cameraErrorMessage}=await import('../gestures.js');
+ assert.match(cameraErrorMessage({name:'NotAllowedError'}),/Allow camera access/);
+ assert.match(cameraErrorMessage({name:'NotFoundError'}),/Connect a camera/);
+ assert.match(cameraErrorMessage({name:'NotReadableError'}),/Close other apps/);
+ assert.match(cameraErrorMessage(new Error('internal wasm stack trace')),/Check your connection/);
+ assert.equal(cameraErrorMessage(new Error('internal wasm stack trace')).includes('stack trace'),false);
+});
