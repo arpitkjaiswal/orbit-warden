@@ -25,3 +25,5 @@ jobs:
           node --check web/logic.js
           node --check web/gestures.js
           node --check web/gesture-logic.js
+          node --check web/feedback.js
+          node --check web/adventure.js

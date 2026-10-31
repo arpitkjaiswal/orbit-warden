@@ -32,3 +32,17 @@ test('campaign scales commander health and offers distinct weapon tradeoffs', as
   assert.ok(WEAPONS.lance.damage>WEAPONS.twin.damage);
   assert.ok(WEAPONS.lance.cost>WEAPONS.twin.cost);
 });
+
+test('fast shots cannot tunnel through an enemy between frames',async()=>{
+ const {sweptCollision}=await import('../logic.js');
+ assert.equal(sweptCollision({x:100,y:200},{x:100,y:100,radius:5},{x:100,y:150,radius:17}),true);
+ assert.equal(sweptCollision({x:140,y:200},{x:140,y:100,radius:5},{x:100,y:150,radius:17}),false);
+ assert.equal(sweptCollision({x:100,y:150},{x:100,y:150,radius:5},{x:100,y:150,radius:17}),true);
+});
+test('aim assist preserves a stable target and excludes unreachable targets',async()=>{
+ const {assistedTarget}=await import('../logic.js');const player={x:480,y:550};
+ const current={x:510,y:300,hp:5},near={x:490,y:310,hp:2},behind={x:480,y:570,hp:4},wide={x:900,y:400,hp:4};
+ assert.equal(assistedTarget([current,near,behind,wide],player,current),current);
+ current.hp=0;assert.equal(assistedTarget([current,near,behind,wide],player,current),near);
+ assert.equal(assistedTarget([behind,wide],player),null);
+});

@@ -16,8 +16,8 @@
 <body>
   <div class="shell">
     <header class="site-header">
-      <div class="brand"><div class="mark"><span>✦</span></div><div><span class="overline">INDEPENDENT ARCADE PROJECT</span><h1>ORBIT <em>WARDEN</em></h1></div></div>
-      <div class="top-right"><span class="status-pulse"></span><span>SECTOR 07 · ACTIVE</span><a class="live-link" href="https://orbit-warden-1.onrender.com/" aria-label="Play Orbit Warden at the live Render deployment">PLAY LIVE ↗</a><span class="build">v2.1</span></div>
+      <div class="brand"><div class="mark"><span>✦</span></div><div><span class="overline">AEGIS EXPEDITION · CAMPAIGN</span><h1>ORBIT <em>WARDEN</em></h1></div></div>
+      <div class="top-right"><span class="status-pulse"></span><span>SECTOR 07 · ACTIVE</span><a class="live-link" href="https://orbit-warden-1.onrender.com/" aria-label="Play Orbit Warden at the live Render deployment">PLAY LIVE ↗</a><span class="build">v3.0</span></div>
     </header>
     <div class="layout">
       <main class="main-column">
@@ -36,14 +36,17 @@
               <div class="intro-emblem" aria-hidden="true">✦</div>
               <div class="eyebrow" id="overlay-eyebrow">INCOMING HOSTILES DETECTED</div>
               <h2 id="overlay-title">DEFEND THE <span>ORBIT.</span></h2>
-              <p id="overlay-detail">Cross three hostile sectors. Switch weapons, collect salvage, and defeat the Sentinel, Ravager, and Overlord to save the galaxy.</p>
+              <p id="overlay-detail">Pick your flight level below. Build kill chains, collect salvage, and beat three commanders. Choose a ship, build your loadout at refit stations, and use homing missiles against elite squadrons. Tune hand steering in the Control Lab.</p>
               <button class="primary-button" id="start-button" type="button">INITIATE DEFENSE <span>→</span></button>
               <span class="overlay-hint" id="overlay-hint">ARROW KEYS TO MOVE &nbsp;·&nbsp; SPACE TO FIRE</span>
             </div>
+          <div id="refit-overlay" class="overlay refit-overlay hidden" role="dialog" aria-modal="true" aria-labelledby="refit-title"><div class="eyebrow">SECTOR SECURED · REFIT STATION</div><h2 id="refit-title">Build your advantage.</h2><p id="refit-label"></p><div id="refit-choices" class="refit-choices"></div><span class="overlay-hint">Choose one upgrade to launch the next sector.</span></div>
           </div>
+          <div class="pilot-deck"><label>SHIP <select id="ship-choice"><option value="vanguard">Vanguard · balanced</option><option value="bastion">Bastion · heavy shield</option><option value="spectre">Spectre · plasma striker</option></select></label><label>FLIGHT LEVEL <select id="flight-difficulty"><option value="rookie">Rookie · relaxed combat</option><option value="standard">Standard · arcade</option><option value="ace">Ace · fast threats</option></select></label><button id="practice-control" type="button">CONTROL LAB ↗</button><label class="toggle"><input id="sound-enabled" type="checkbox"> Sound</label><label class="toggle"><input id="reduced-motion" type="checkbox"> Less motion</label></div>
+          <div id="run-build" class="build-strip">Vanguard · WAVE 1/3 · Choose upgrades after each commander</div><div class="chain-strip"><span id="combo-readout">BUILD A KILL CHAIN</span><div class="track"><div id="combo-fill" class="fill energy-fill" style="width:0"></div></div><span>5 KILLS = SCORE BOOST · UP TO ×5</span></div>
           <div class="arsenal" aria-label="Weapons and abilities">
             <div class="weapon-choices"><button data-weapon="twin" data-slot="1" aria-pressed="true">1 · TWIN</button><button data-weapon="spread" data-slot="2" aria-pressed="false">2 · SPREAD</button><button data-weapon="lance" data-slot="3" aria-pressed="false">3 · LANCE</button></div>
-            <div class="ability-choices"><button id="dash-action">Q · DASH READY</button><button id="nova-action">X · NOVA READY</button><button id="overdrive-action">Z · OVERDRIVE READY</button></div>
+            <div class="ability-choices"><button id="dash-action">Q · DASH READY</button><button id="nova-action">X · NOVA READY</button><button id="missile-action">C · MISSILES 3</button><button id="overdrive-action">Z · OVERDRIVE READY</button></div>
             <div class="assist-options"><label><input id="aim-assist" type="checkbox" checked> Aim assist</label><label><input id="camera-autofire" type="checkbox" checked> Camera auto-fire</label></div><span id="loadout">Twin laser MK 1 · 0 kills</span>
           </div>
           <div class="resource-bar">
@@ -53,9 +56,28 @@
           <div class="game-footer"><span><span class="tiny-led"></span><span id="game-status">STANDBY · AWAITING PILOT</span></span><span id="best-score">PERSONAL BEST 000000</span></div>
         </section>
         <div class="mobile-controls" aria-label="Mobile touch controls"><button id="touch-left" type="button">◀ MOVE</button><button id="touch-fire" type="button">FIRE ◎</button><button id="touch-right" type="button">MOVE ▶</button><button id="touch-recharge" type="button">RECHARGE</button><button id="touch-shield" type="button">SHIELD</button><button id="touch-up" type="button">▲ UP</button><button id="touch-down" type="button">▼ DOWN</button><button id="touch-dash" type="button">DASH</button><button id="touch-nova" type="button">NOVA</button></div>
-        <section class="about-section"><span class="section-kicker">THE MISSION</span><h3>Three sectors. Three commanders. One galaxy.</h3><p>Fight through the Outer Rim, Crimson Nebula, and Void Citadel. Every fifth kill drops repair, energy, or shield salvage. Survive 30 seconds in each sector to challenge its commander. Boss victories repair your hull and permanently upgrade your weapons for this run. Dash grants brief invulnerability; nova clears hostile shots and blasts every enemy. The Aegis fighter adds twin wing cannons, a salvage magnet, aim assist, and a six-second overdrive that doubles firing speed and boosts damage. Switch aim assist or camera auto-fire off below the arena for manual combat. Complete all three sectors to win.</p></section>
+        <section class="pilot-record"><span class="section-kicker">PILOT RECORD · SAVED ON THIS DEVICE</span><h3>Earn your wings.</h3><div id="pilot-badges" class="pilot-badges"></div></section>
+        <section class="about-section"><span class="section-kicker">THE MISSION</span><h3>Three sectors. Three commanders. One galaxy.</h3><p>Fight through the Outer Rim, Crimson Nebula, and Void Citadel. Every fifth kill drops repair, energy, or shield salvage. Survive 30 seconds in each sector to challenge its commander. Boss victories repair your hull and permanently upgrade your weapons for this run. Dash grants brief invulnerability; nova clears hostile shots and blasts every enemy. Choose Vanguard, Bastion, or Spectre. Nine combat waves, armed interceptors, and elite carriers stand between you and three commanders with evolving attacks. Fire guided missile salvos with C, pick one of three upgrades at each refit station, and build your own winning combination of weapons, hull, drones, and energy systems. Six pilot badges track your achievements on this device. Switch aim assist or camera auto-fire off below the arena for manual combat. Complete all three sectors to win.</p></section>
       </main>
       <aside class="sidebar">
+        <section class="side-card gesture-card"><div class="card-heading"><span class="iconbox purple">◉</span><div><span class="section-kicker">EXPERIMENTAL INPUT</span><h3>Gesture Control</h3></div></div>
+          <div class="camera-preview"><video id="camera" autoplay muted playsinline></video><canvas id="hand-overlay" width="320" height="180"></canvas><div class="camera-placeholder" id="camera-placeholder"><div class="camera-ring">◎</div><span>CAMERA OFFLINE</span></div><span class="camera-label" id="camera-label">NO FEED</span></div>
+          <div class="gesture-readout"><span>DETECTED GESTURE</span><strong id="gesture-name">NONE</strong></div>
+          <div class="gesture-readout"><span>POSE CONFIRMATION</span><strong id="gesture-confidence">—</strong></div>
+          <button id="gesture-toggle" class="secondary-button" type="button">ENABLE CAMERA CONTROL <span>↗</span></button>
+          <div class="camera-settings">
+            <button id="center-hand" type="button" class="secondary-button">CENTER MY HAND ◎</button>
+            <label>Steering <select id="steer-mode"><option value="relaxed">Relaxed · horizontal flight lane</option><option value="free">Free flight · both axes</option></select></label>
+            <label>Hand reach <output id="reach-value">1×</output><input id="hand-reach" type="range" min="0.6" max="1.8" step="0.1" value="1"></label>
+            <label>Smoothing <select id="hand-smoothing"><option value="0.05">Quick response</option><option value="0.09" selected>Balanced</option><option value="0.16">Extra steady</option></select></label>
+            <label class="toggle"><input id="pause-hand-loss" type="checkbox" checked> Pause when hand is lost</label>
+          </div>
+          <div class="hold-readout"><span>POWER HOLD</span><div class="track"><div id="hold-fill" class="fill shield-fill" style="width:0"></div></div></div>
+          <div id="power-status" class="power-status" role="status">CAMERA OFF · KEYBOARD READY</div>
+          <p id="gesture-status" class="helper-text" aria-live="polite">Camera stays off until you enable it. Open Control Lab to practice safely.</p>
+          <div class="gesture-help"><span>☝ Index = fire</span><span>✊ Fist = shield</span><span>✋ Palm = recharge</span><span>↔ Hand = fly</span><span>🤏 Pinch = overdrive</span><span>3 fingers = missiles</span><span>✌ Hold = nova</span></div>
+          <p class="helper-text">Control Lab → Enable camera → Center my hand. Keep your whole hand visible in good light.</p><details class="camera-instructions"><summary>Gesture guide and camera help</summary><p class="helper-text">Start a mission or open Control Lab, then enable the camera (G). Keep one whole hand visible in good light. Tap Center my hand in a comfortable position. Relaxed steering controls left/right; choose Free flight to use both axes. Higher Hand reach means smaller gestures move farther. Pinch thumb/index with other fingers open for 0.45s, hold a peace sign for 0.8s, or extend index/middle/ring with pinky folded for 0.55s to launch missiles; release before repeating. Aim assist and camera auto-fire help you fight. Palm and fist stop automatic fire. If tracking disappears, hand movement and powers stop; the mission pauses after 0.8 seconds unless you turn that option off. Use keyboard or touch at any time. HTTPS or localhost is required; allow camera permission. Camera processing happens on your device.</p></details>
+        </section>
         <section class="side-card controls-card"><div class="card-heading"><span class="iconbox">⌘</span><div><span class="section-kicker">PILOT HANDBOOK</span><h3>Controls</h3></div></div>
           <div class="control-row"><span>Move spaceship</span><span class="key-group"><kbd>←</kbd><kbd>→</kbd></span></div>
           <div class="control-row"><span>Fire laser</span><kbd class="wide-key">SPACE</kbd></div>
@@ -64,24 +86,15 @@
           <div class="control-row"><span>Switch weapon</span><kbd>1 / 2 / 3</kbd></div>
           <div class="control-row"><span>Dash · 4s cooldown</span><kbd>Q</kbd></div>
           <div class="control-row"><span>Nova · 18s cooldown</span><kbd>X</kbd></div>
-          <div class="control-row"><span>Overdrive · 6s burst</span><kbd>Z</kbd></div><div class="control-row"><span>Camera on/off</span><kbd>G</kbd></div><div class="control-row"><span>Pause game</span><kbd>P</kbd></div>
+          <div class="control-row"><span>Homing missile salvo</span><kbd>C</kbd></div><div class="control-row"><span>Overdrive · 6s burst</span><kbd>Z</kbd></div><div class="control-row"><span>Camera on/off</span><kbd>G</kbd></div><div class="control-row"><span>Pause game</span><kbd>P</kbd></div>
           <div class="control-row"><span>Restart</span><kbd>R</kbd></div>
           <p class="helper-text">Use arrow keys or WASD to fly in all directions. Dash follows left steering, otherwise right. You can also tap weapon and ability buttons below the arena.</p>
-        </section>
-        <section class="side-card gesture-card"><div class="card-heading"><span class="iconbox purple">◉</span><div><span class="section-kicker">EXPERIMENTAL INPUT</span><h3>Gesture Control</h3></div></div>
-          <div class="camera-preview"><video id="camera" autoplay muted playsinline></video><canvas id="hand-overlay" width="320" height="180"></canvas><div class="camera-placeholder" id="camera-placeholder"><div class="camera-ring">◎</div><span>CAMERA OFFLINE</span></div><span class="camera-label" id="camera-label">NO FEED</span></div>
-          <div class="gesture-readout"><span>DETECTED GESTURE</span><strong id="gesture-name">NONE</strong></div>
-          <div class="gesture-readout"><span>SMOOTHING CONFIDENCE</span><strong id="gesture-confidence">—</strong></div>
-          <button id="gesture-toggle" class="secondary-button" type="button">ENABLE CAMERA CONTROL <span>↗</span></button>
-          <div id="power-status" class="power-status" role="status">CAMERA OFF · KEYBOARD READY</div>
-          <p id="gesture-status" class="helper-text" aria-live="polite">Optional webcam tracking with MediaPipe. The camera is off until you enable it.</p>
-          <div class="gesture-help"><span>☝ Index = fire</span><span>✊ Fist = shield</span><span>✋ Palm = recharge</span><span>↔ ↕ Hand = fly</span><span>🤏 Pinch = overdrive</span><span>✌ Hold = nova</span></div>
-          <p class="helper-text">Start a mission, then enable the camera (G). Keep one whole hand visible, fingers pointing up, in good light. Pinch for 0.45s or hold a peace sign for 0.8s; release before repeating. Aim assist and camera auto-fire help you fight. Palm and fist stop automatic fire. If tracking disappears, hand movement and powers stop. Use keyboard or touch at any time. HTTPS or localhost is required; allow camera permission. Camera processing happens on your device.</p>
         </section>
         <section class="side-card intel-card"><div class="card-heading"><span class="iconbox orange">⌁</span><div><span class="section-kicker">THREAT INTELLIGENCE</span><h3>Enemy Types</h3></div></div>
           <div class="enemy-row"><span class="enemy-glyph asteroid-glyph">⬡</span><div><strong>Asteroid</strong><small>Slow descent · 10 pts</small></div><span class="enemy-points">+10</span></div>
           <div class="enemy-row"><span class="enemy-glyph drone-glyph">◈</span><div><strong>Attack Drone</strong><small>Sine-wave flight · 25 pts</small></div><span class="enemy-points">+25</span></div>
           <div class="enemy-row"><span class="enemy-glyph zigzag-glyph">⟡</span><div><strong>Phantom</strong><small>Fast evasive path · 35 pts</small></div><span class="enemy-points">+35</span></div>
+          <div class="enemy-row"><span class="enemy-glyph drone-glyph">⌁</span><div><strong>Interceptor</strong><small>Telegraphed aimed shots · 45 pts</small></div></div><div class="enemy-row"><span class="enemy-glyph tank-glyph">⬢</span><div><strong>Elite Carrier</strong><small>Heavy armor · 3-shot volley · 120 pts</small></div></div>
           <div class="enemy-row"><span class="enemy-glyph tank-glyph">⬢</span><div><strong>Siege Tank</strong><small>Armored hull · 50 pts</small></div><span class="enemy-points">+50</span></div>
         </section>
       </aside>

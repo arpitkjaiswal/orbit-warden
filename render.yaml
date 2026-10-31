@@ -13,3 +13,6 @@ services:
       - path: /*
         name: X-Content-Type-Options
         value: nosniff
+      - path: /*
+        name: Cache-Control
+        value: no-cache

@@ -7,6 +7,8 @@ export const ENEMY_TYPES = Object.freeze({
   asteroid: { radius: 22, speed: 100, hp: 1, points: 10, wave: 0, amplitude: 0 },
   drone: { radius: 18, speed: 125, hp: 2, points: 25, wave: 2.7, amplitude: 70 },
   zigzag: { radius: 17, speed: 155, hp: 2, points: 35, wave: 5.0, amplitude: 105 },
+  interceptor: {radius:19,speed:105,hp:3,points:45,wave:2,amplitude:110},
+  carrier: {radius:32,speed:60,hp:10,points:120,wave:.8,amplitude:55},
   tank: { radius: 30, speed: 75, hp: 5, points: 50, wave: 1.2, amplitude: 35 },
 });
 export const clamp = (value, lo, hi) => Math.max(lo, Math.min(hi, value));
@@ -34,9 +36,9 @@ export function chooseEnemy(random = Math.random) {
 }
 
 export const SECTORS = Object.freeze([
-  {name: 'Outer Rim', color: '#49e7ff', boss: 'Sentinel', hp: 65},
-  {name: 'Crimson Nebula', color: '#ff698b', boss: 'Ravager', hp: 95},
-  {name: 'Void Citadel', color: '#aa8eff', boss: 'Overlord', hp: 135},
+  {name: 'Outer Rim', color: '#49e7ff', boss: 'Sentinel', hp: 110},
+  {name: 'Crimson Nebula', color: '#ff698b', boss: 'Ravager', hp: 170},
+  {name: 'Void Citadel', color: '#aa8eff', boss: 'Overlord', hp: 250},
 ]);
 export const WEAPONS = Object.freeze({
   twin: {name: 'Twin laser', cost: 6, cooldown: .16, angles: [0, 0], damage: 1},
@@ -45,9 +47,27 @@ export const WEAPONS = Object.freeze({
 });
 export function collectSalvage(state, kind) {
   if(state.over) return state;
-  if(kind === 'repair') state.hp = Math.min(STARTING_HP, state.hp + 1);
+  if(kind === 'repair') state.hp = Math.min(state.maxHp??STARTING_HP, state.hp + 1);
   else if(kind === 'energy') state.energy = MAX_RESOURCE;
   else if(kind === 'shield') state.shield = MAX_RESOURCE;
   return state;
 }
 export function canActivate(running, paused, cooldown) { return running && !paused && cooldown <= 0; }
+
+export const FLIGHT_MODES = Object.freeze({
+  rookie: {name:'Rookie', speed:.78, projectileSpeed:.75, hitbox:12},
+  standard: {name:'Standard', speed:1, projectileSpeed:1, hitbox:16},
+  ace: {name:'Ace', speed:1.2, projectileSpeed:1.15, hitbox:18},
+});
+export function sweptCollision(from,to,circle) {
+  const dx=to.x-from.x,dy=to.y-from.y,length=dx*dx+dy*dy;
+  const t=length?clamp(((circle.x-from.x)*dx+(circle.y-from.y)*dy)/length,0,1):0;
+  return collision({x:from.x+dx*t,y:from.y+dy*t,radius:to.radius},circle);
+}
+export function assistedTarget(enemies,player,previous=null) {
+  const valid=e=>e.hp>0 && e.y<player.y-30 && Math.abs(Math.atan2(e.x-player.x,player.y-e.y))<=.7;
+  const targets=enemies.filter(valid);
+  const distance=e=>Math.hypot(e.x-player.x,e.y-player.y);
+  const nearest=targets.reduce((best,e)=>!best||distance(e)<distance(best)?e:best,null);
+  return previous && targets.includes(previous) && (!nearest||distance(previous)<=distance(nearest)*1.3)?previous:nearest;
+}

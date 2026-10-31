@@ -1,4 +1,4 @@
-import {classifyHand, handPosition} from './gesture-logic.js';
+import {classifyHand, HandSteering, PoseFilter} from './gesture-logic.js';
 /** Webcam-only, opt-in gesture tracking via MediaPipe Tasks Vision.
  * No images are uploaded by this application. MediaPipe may make its own telemetry requests.
  * User-provided trained classifiers have not been bundled.
@@ -6,7 +6,6 @@ import {classifyHand, handPosition} from './gesture-logic.js';
 const CDN = 'https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@1.2.0';
 const DEFAULT_MODEL = 'https://storage.googleapis.com/mediapipe-models/hand_landmarker/hand_landmarker/float16/1/hand_landmarker.task';
 const SEGMENTS = [[0,1],[1,2],[2,3],[3,4],[0,5],[5,6],[6,7],[7,8],[5,9],[9,10],[10,11],[11,12],[9,13],[13,14],[14,15],[15,16],[13,17],[17,18],[18,19],[19,20],[0,17]];
-const smooth = (oldValue, target, fraction) => oldValue * (1 - fraction) + target * fraction;
 
 export class GestureTracker {
   constructor({ video, overlay, placeholder, button, label, confidence, status, feedLabel }) {
@@ -29,6 +28,8 @@ export class GestureTracker {
     this.y = .65;
     this.tracking = false;
     this.history = [];
+    this.poseFilter=new PoseFilter();
+    this.steering=new HandSteering();
     this.lastVideoTime = -1;
     this.lastInference = 0;
     this.lastHandsSeen = 0;
@@ -47,7 +48,8 @@ export class GestureTracker {
     this.loading = true;
     const generation = ++this.generation;
     this.statusEl.textContent = 'Requesting webcam permission and loading MediaPipe…';
-    this.button.disabled = true;
+    this.button.textContent='CANCEL CAMERA STARTUP';
+    this.button.disabled = false;
     try {
       const stream = await navigator.mediaDevices.getUserMedia({video: {width: 640, height: 360, facingMode: 'user'}, audio: false});
       if (generation !== this.generation) {stream.getTracks().forEach(track=>track.stop());return;}
@@ -108,33 +110,37 @@ export class GestureTracker {
 
   releaseHand() {
     this.tracking=false;this.label='none';this.history=[];this.confidence=0;
+    this.poseFilter.reset();
     this.labelEl.textContent='NO HAND';this.confidenceEl.textContent='—';
     this.ctx.clearRect(0,0,this.overlay.width,this.overlay.height);
   }
 
-  push(label) {
-    this.history.push(label);
-    if (this.history.length > 7) this.history.shift();
-    const counts = new Map();
-    for (const value of this.history) counts.set(value, (counts.get(value) ?? 0) + 1);
-    let bestLabel = 'none', maxCount = 0;
-    for (const [value, count] of counts) if (count > maxCount) {bestLabel = value; maxCount = count;}
-    this.confidence = maxCount / this.history.length;
-    // Require a short majority before issuing an action. Intentional release on hand loss.
-    this.label = maxCount >= 4 && this.confidence >= 0.57 ? bestLabel : 'none';
-    this.labelEl.textContent = this.label.toUpperCase();
-    this.confidenceEl.textContent = `${Math.round(this.confidence * 100)}%`;
+  push(label,dt=.04) {
+    this.label=this.poseFilter.update(label,dt);
+    this.confidence=this.poseFilter.confidence;
+    this.labelEl.textContent=this.label==='none'?'READING…':this.label.toUpperCase();
+    this.confidenceEl.textContent=`${Math.round(this.confidence*100)}%`;
+  }
+
+  calibrate() {
+    if(!this.tracking || !this.steering.calibrate()){
+      this.statusEl.textContent='Show a hand in the camera, then tap Center my hand.';return false;
+    }
+    this.x=.5;this.y=.5;
+    this.statusEl.textContent='Centered! Move comfortably from this position. Adjust reach and smoothing below.';
+    return true;
   }
 
   tick(now) {
     if(this.enabled && now-this.lastHandsSeen>300)this.releaseHand();
-    if (!this.enabled || !this.landmarker || this.video.readyState < 2 || now - this.lastInference < 70) return;
+    if (!this.enabled || !this.landmarker || this.video.readyState < 2 || now - this.lastInference < 40) return;
     if (this.video.currentTime === this.lastVideoTime) return;
     this.lastVideoTime = this.video.currentTime;
+    const dt=Math.min(.1,Math.max(.001,(now-this.lastInference)/1000));
     this.lastInference = now;
     let hands;
     try { hands = this.landmarker.detectForVideo(this.video, now).landmarks; }
-    catch (err) {this.statusEl.textContent = `Tracking error: ${err.message}`; this.disable(); return;}
+    catch (err) {this.disable();this.statusEl.textContent = `Tracking error: ${err.message}. Use keyboard or retry camera.`; return;}
     const points = hands?.[0];
     if (!points) {
       this.releaseHand();
@@ -145,10 +151,9 @@ export class GestureTracker {
     // Mirrored video matches a mirror-style gesture interface; both x and overlay use the same reflection.
     this.lastHandsSeen=now;this.tracking=true;
     this.feedLabelEl.textContent='LIVE · ON DEVICE';
-    const position=handPosition(points);
-    this.x = smooth(this.x,position.x,.4);
-    this.y = smooth(this.y,position.y,.4);
-    this.push(this.inferGesture(points));
+    const position=this.steering.update({x:1-points[9].x,y:points[9].y},dt);
+    this.x=position.x;this.y=position.y;
+    this.push(this.inferGesture(points),dt);
     this.drawSkeleton(points);
   }
 
@@ -156,6 +161,7 @@ export class GestureTracker {
     const {ctx, overlay} = this;
     ctx.clearRect(0, 0, overlay.width, overlay.height);
     const W = overlay.width, H = overlay.height;
+    ctx.strokeStyle='#ffffff35';ctx.setLineDash?.([4,4]);ctx.strokeRect?.(W*.15,H*.2,W*.7,H*.6);ctx.setLineDash?.([]);
     ctx.lineWidth = 2;
     ctx.strokeStyle = 'rgba(77,237,250,.95)';
     ctx.shadowBlur = 5;

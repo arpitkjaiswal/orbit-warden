@@ -48,3 +48,36 @@ test('cancelling while camera permission is pending stops the late stream',async
   assert.equal(stopped,1);assert.equal(t.enabled,false);assert.equal(t.stream,null);assert.equal(t.loading,false);
  } finally {if(original)Object.defineProperty(globalThis,'navigator',original);else delete globalThis.navigator;}
 });
+
+test('fast poses confirm in 80ms and switching intent clears the old action immediately',async()=>{
+ const {PoseFilter}=await import('../gesture-logic.js');const filter=new PoseFilter();
+ assert.equal(filter.update('fire',.04),'none');assert.equal(filter.update('fire',.04),'fire');
+ assert.equal(filter.update('shield',.04),'none');assert.equal(filter.update('shield',.04),'shield');
+ assert.equal(filter.update('none',.04),'none');assert.equal(filter.confidence,0);
+ for(let i=0;i<3;i++)assert.equal(filter.update('nova',.04),'none');assert.equal(filter.update('nova',.04),'nova');
+});
+test('calibration centers an off-axis hand, rejects jitter and supports reduced reach',async()=>{
+ const {HandSteering}=await import('../gesture-logic.js');const steering=new HandSteering();assert.equal(steering.calibrate(),false);
+ steering.update({x:.7,y:.4},.1);assert.equal(steering.calibrate(),true);
+ assert.deepEqual(steering.update({x:.703,y:.398},.04),{x:.5,y:.5});
+ steering.sensitivity=1.8;for(let i=0;i<30;i++)steering.update({x:.9,y:.4},.04);
+ assert.ok(steering.position.x>.98);assert.equal(steering.position.y,.5);
+});
+test('steering smoothing remains consistent across camera frame rates',async()=>{
+ const {HandSteering}=await import('../gesture-logic.js');const a=new HandSteering(),b=new HandSteering();
+ for(let i=0;i<100;i++)a.update({x:.7,y:.8},.01);
+ for(let i=0;i<20;i++)b.update({x:.7,y:.8},.05);
+ assert.ok(Math.abs(a.position.x-b.position.x)<.012);assert.ok(Math.abs(a.position.y-b.position.y)<.012);
+});
+test('a brief ambiguous pose cannot rearm an already fired power',()=>{
+ const power=new GesturePower();for(let i=0;i<10;i++)power.update('nova',.1);
+ power.update('none',.04);for(let i=0;i<20;i++)assert.equal(power.update('nova',.05),null);
+ for(let i=0;i<5;i++)power.update('move',.05);let actions=0;
+ for(let i=0;i<20;i++)if(power.update('nova',.05))actions++;
+ assert.equal(actions,1);
+});
+test('three-finger missile pose confirms and requires a held, released action',()=>{
+ assert.equal(classifyHand(hand([true,true,true,false])),'missiles');
+ const power=new GesturePower();for(let i=0;i<10;i++)assert.equal(power.update('missiles',.05),null);
+ assert.equal(power.update('missiles',.05),'missiles');for(let i=0;i<30;i++)assert.equal(power.update('missiles',.05),null);
+});
