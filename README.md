@@ -117,3 +117,16 @@ GitHub Actions runs these checks on pushes and pull requests. Browser visuals an
 ├── requirements-gestures.txt
 └── tests/test_logic.py
 ```
+
+## Browser adventure campaign (v2)
+
+The browser edition now features three sectors: **Outer Rim → Crimson Nebula → Void Citadel**. Survive 30 seconds per sector to summon its commander, then defeat it to advance. Defeat the Overlord to complete the campaign. Boss victories restore two hull points, refill energy, reset nova, and upgrade all weapons for the current run. Restart begins a fresh campaign; your best score stays saved locally.
+
+- **Arrows / WASD:** move horizontally and vertically.
+- **1 / 2 / 3:** switch between efficient twin lasers, a three-way spread, and heavy plasma lance. The buttons below the arena also switch weapons.
+- **Q:** dash left when steering left, otherwise right, with brief invulnerability (4-second cooldown).
+- **X:** nova deals 30 damage to every enemy and clears hostile projectiles (18-second cooldown).
+- **Salvage:** every fifth regular kill drops a repair, energy, or shield pickup. Fly into it to collect it.
+- **Commanders:** aimed five-shot volleys, increasing hull strength, visible health bars, and sector rewards.
+
+Touch controls include vertical movement, dash, and nova. Existing fire, shield, recharge, pause, and gesture controls remain available. These campaign additions apply to the browser edition; the original desktop edition keeps its survival gameplay.

@@ -1,4 +1,4 @@
-import {WIDTH, HEIGHT, STARTING_HP, ENEMY_TYPES, clamp, collision, difficultyAt, damage, award, freshState, chooseEnemy, moveEnemy} from './logic.js';
+import {WIDTH, HEIGHT, STARTING_HP, ENEMY_TYPES, clamp, collision, difficultyAt, damage, freshState, chooseEnemy, moveEnemy, SECTORS, WEAPONS, collectSalvage, canActivate} from './logic.js';
 import {GestureTracker} from './gestures.js';
 
 const $ = (id) => document.getElementById(id);
@@ -21,6 +21,9 @@ class OrbitWarden {
     this.lastFrame = performance.now();
     this.reset();
     this.attachControls();
+    document.querySelectorAll('[data-weapon]').forEach(button=>button.addEventListener('click',()=>this.action(`Digit${button.dataset.slot}`)));
+    $('dash-action').addEventListener('click',()=>this.action('KeyQ'));
+    $('nova-action').addEventListener('click',()=>this.action('KeyX'));
     this.updateHud();
     requestAnimationFrame(t => this.frame(t));
   }
@@ -32,6 +35,9 @@ class OrbitWarden {
     this.state = freshState();
     this.player = {x: WIDTH/2, y: HEIGHT-90, radius: 20};
     this.enemies = []; this.lasers = []; this.particles = []; this.floatingTexts = [];
+    this.sector = 0; this.sectorTime = 0; this.bossSpawned = false;
+    this.bullets = []; this.pickups = []; this.weapon = 'twin'; this.upgrade = 0;
+    this.dashCooldown = 0; this.novaCooldown = 0; this.novaRing = 0; this.kills = 0;
     this.spawnTimer = .7;
     this.fireCooldown = 0;
     this.hitCooldown = 0;
@@ -43,11 +49,12 @@ class OrbitWarden {
   }
 
   attachControls() {
-    const relevant = new Set(['ArrowLeft','ArrowRight','ArrowUp','ArrowDown','Space','ShiftLeft','ShiftRight','KeyA','KeyD','KeyE','KeyP','KeyR','Escape','KeyG']);
+    const relevant = new Set(['ArrowLeft','ArrowRight','ArrowUp','ArrowDown','Space','ShiftLeft','ShiftRight','KeyW','KeyS','KeyQ','KeyX','Digit1','Digit2','Digit3','KeyA','KeyD','KeyE','KeyP','KeyR','Escape','KeyG']);
     window.addEventListener('keydown', (event) => {
       if (relevant.has(event.code)) event.preventDefault();
       if (event.repeat && ['KeyP','KeyR','KeyG'].includes(event.code)) return;
       this.input.add(event.code);
+      if (!event.repeat) this.action(event.code);
       if (event.code === 'KeyP') this.togglePause();
       if (event.code === 'KeyR') this.start();
       if (event.code === 'KeyG' && !event.repeat) this.gestures.toggle();
@@ -57,14 +64,51 @@ class OrbitWarden {
     window.addEventListener('keyup', (e) => this.input.delete(e.code));
     window.addEventListener('blur', () => this.input.clear());
     $('start-button').addEventListener('click', () => { if (this.paused) this.resume(); else this.start(); });
-    for (const [id,key] of [['touch-left','ArrowLeft'],['touch-right','ArrowRight'],['touch-fire','Space'],['touch-recharge','KeyE'],['touch-shield','ShiftLeft']]) {
+    for (const [id,key] of [['touch-left','ArrowLeft'],['touch-right','ArrowRight'],['touch-fire','Space'],['touch-recharge','KeyE'],['touch-shield','ShiftLeft'],['touch-up','ArrowUp'],['touch-down','ArrowDown'],['touch-dash','KeyQ'],['touch-nova','KeyX']]) {
       const node=$(id);
-      const down=(event)=>{event.preventDefault();if(!this.running && !this.paused)this.start();this.input.add(key);node.setPointerCapture?.(event.pointerId);};
+      const down=(event)=>{event.preventDefault();if(!this.running && !this.paused)this.start();this.input.add(key);this.action(key);node.setPointerCapture?.(event.pointerId);};
       const up=(event)=>{event.preventDefault();this.input.delete(key);};
       node.addEventListener('pointerdown',down);
       node.addEventListener('pointerup',up);
       node.addEventListener('pointercancel',up);
       node.addEventListener('lostpointercapture',up);
+    }
+  }
+
+  action(key) {
+    if (!this.running || this.paused) return;
+    if (['Digit1','Digit2','Digit3'].includes(key)) this.weapon = ['twin','spread','lance'][Number(key.at(-1))-1];
+    if(key === 'KeyQ' && canActivate(this.running,this.paused,this.dashCooldown)) {
+      const direction = this.input.has('ArrowLeft') || this.input.has('KeyA') ? -1 : 1;
+      this.particlesAt(this.player.x,this.player.y,COLORS.purple,30,230);
+      this.player.x=clamp(this.player.x+direction*190,35,WIDTH-35);
+      this.hitCooldown= .65; this.dashCooldown=4;
+    }
+    if(key === 'KeyX' && canActivate(this.running,this.paused,this.novaCooldown)) {
+      this.novaCooldown=18; this.novaRing=1; this.bullets=[]; this.shake=.35;
+      for(const enemy of [...this.enemies]) {
+        enemy.hp-=30;
+        if(enemy.hp<=0) this.destroyEnemy(enemy);
+      }
+    }
+  }
+
+  destroyEnemy(enemy) {
+    const index=this.enemies.indexOf(enemy); if(index<0)return;
+    this.enemies.splice(index,1); this.kills++;
+    this.state.score+=enemy.boss ? 1000*(this.sector+1) : ENEMY_TYPES[enemy.kind].points;
+    this.particlesAt(enemy.x,enemy.y,SECTORS[this.sector].color,enemy.boss?65:24,230);
+    this.floatingTexts.push({x:enemy.x,y:enemy.y,text:enemy.boss?'SECTOR CLEARED':`+${ENEMY_TYPES[enemy.kind].points}`,life:.8});
+    if(enemy.boss) {
+      this.upgrade++; this.state.hp=Math.min(STARTING_HP,this.state.hp+2);
+      this.state.energy=100; this.novaCooldown=0; this.bullets=[];
+      if(this.sector===SECTORS.length-1) {
+        this.running=false; this.writeBest(this.state.score);
+        this.showOverlay('GALAXY SAVED',`All three commanders defeated! ${this.state.score.toLocaleString()} points · ${this.kills} hostiles destroyed.`, 'NEW ADVENTURE', 'CAMPAIGN COMPLETE', 'R TO PLAY AGAIN');
+      } else {this.sector++;this.sectorTime=0;this.bossSpawned=false;this.enemies=[];this.pickups=[];}
+    } else if(this.kills%5===0) {
+      const kind=['repair','energy','shield'][Math.floor(Math.random()*3)];
+      this.pickups.push({x:enemy.x,y:enemy.y,radius:16,kind});
     }
   }
 
@@ -107,15 +151,20 @@ class OrbitWarden {
   }
 
   fire() {
-    if(this.fireCooldown>0 || this.state.energy<8 || this.state.over)return;
-    this.fireCooldown=.16;
-    this.state.energy=clamp(this.state.energy-8,0,100);
-    this.lasers.push({x:this.player.x-7,y:this.player.y-20,radius:5},{x:this.player.x+7,y:this.player.y-20,radius:5});
+    const weapon=WEAPONS[this.weapon];
+    if(this.fireCooldown>0 || this.state.energy<weapon.cost || this.state.over)return;
+    this.fireCooldown=weapon.cooldown;
+    this.state.energy-=weapon.cost;
+    weapon.angles.forEach((angle,i)=>this.lasers.push({
+      x:this.player.x+(this.weapon==='twin'?(i===0?-9:9):0),y:this.player.y-25,radius:this.weapon==='lance'?9:5,
+      vx:Math.sin(angle)*690,vy:-Math.cos(angle)*690,damage:weapon.damage+this.upgrade,
+    }));
     this.particlesAt(this.player.x,this.player.y-28,COLORS.cyan,4,40);
   }
 
   handleEnemyCollision(enemy) {
     if (!collision(enemy,this.player))return false;
+    if(enemy.boss && this.hitCooldown>0)return false;
     this.particlesAt(enemy.x,enemy.y,COLORS.red,18,200);
     this.shake=Math.max(this.shake,.22);
     if(this.shielding && this.state.shield>0){this.state.shield=clamp(this.state.shield-16,0,100);this.particlesAt(this.player.x,this.player.y,COLORS.cyan,17,90);}
@@ -125,14 +174,36 @@ class OrbitWarden {
       this.flash=.2;
       if(this.state.over){this.particlesAt(this.player.x,this.player.y,COLORS.red,65,270);this.gameOver();}
     }
-    return true;
+    return !enemy.boss;
   }
 
   update(dt,now) {
     this.gestures.tick(now);
     if (!this.running || this.paused) return;
     const s=this.state;
-    s.elapsed += dt;
+    s.elapsed += dt; this.sectorTime+=dt;
+    this.dashCooldown=Math.max(0,this.dashCooldown-dt); this.novaCooldown=Math.max(0,this.novaCooldown-dt); this.novaRing=Math.max(0,this.novaRing-dt);
+    const dy=Number(this.input.has('ArrowDown')||this.input.has('KeyS'))-Number(this.input.has('ArrowUp')||this.input.has('KeyW'));
+    this.player.y=clamp(this.player.y+dy*300*dt,100,HEIGHT-45);
+    if(this.sectorTime>=30 && !this.bossSpawned) {
+      this.bossSpawned=true; const spec=SECTORS[this.sector];
+      this.enemies.push({kind:'tank',boss:true,x:WIDTH/2,y:90,radius:55,hp:spec.hp,maxHp:spec.hp,time:0,shotTimer:1,rotation:0,spin:0});
+    }
+    for(let i=this.pickups.length-1;i>=0;i--){
+      const p=this.pickups[i]; p.y+=85*dt;
+      if(collision(p,this.player)){collectSalvage(s,p.kind);this.pickups.splice(i,1);this.floatingTexts.push({x:p.x,y:p.y,text:p.kind.toUpperCase(),life:.8});}
+      else if(p.y>HEIGHT+20)this.pickups.splice(i,1);
+    }
+    this.shielding=(this.input.has('ShiftLeft')||this.input.has('ShiftRight')||(this.gestures.enabled && this.gestures.label==='shield')) && s.shield>0;
+    for(let i=this.bullets.length-1;i>=0;i--){
+      const b=this.bullets[i]; b.x+=b.vx*dt;b.y+=b.vy*dt;
+      if(collision(b,this.player)){
+        if(this.shielding && s.shield>0)s.shield=clamp(s.shield-12,0,100);
+        else if(this.hitCooldown<=0){damage(s);this.hitCooldown=.8;this.flash=.2;if(s.over)this.gameOver();}
+        this.bullets.splice(i,1);
+      } else if(b.y>HEIGHT+30 || b.y< -30 || b.x< -30 || b.x>WIDTH+30)this.bullets.splice(i,1);
+    }
+    if(s.over)return;
     this.fireCooldown=Math.max(0,this.fireCooldown-dt);
     this.hitCooldown=Math.max(0,this.hitCooldown-dt);
     this.shake=Math.max(0,this.shake-dt);
@@ -145,31 +216,38 @@ class OrbitWarden {
     this.beaming=(this.input.has('KeyE')||(this.gestures.enabled && this.gestures.label==='recharge')) && !this.shielding;
     if(this.shielding)s.shield=clamp(s.shield-38*dt,0,100);
     else s.shield=clamp(s.shield+10*dt,0,100);
-    s.energy=clamp(s.energy+(this.beaming?32:5)*dt,0,100);
+    s.energy=clamp(s.energy+(this.beaming?38:14)*dt,0,100);
     if(this.input.has('Space')||(this.gestures.enabled&&this.gestures.label==='fire'))this.fire();
     this.spawnTimer-=dt;
-    if(this.spawnTimer<=0){this.spawnEnemy();const level=difficultyAt(s.elapsed);this.spawnTimer=random(.4,.85)/level;}
+    if(this.spawnTimer<=0 && !this.bossSpawned){this.spawnEnemy();const level=difficultyAt(s.elapsed);this.spawnTimer=random(.4,.85)/level;}
     for(let i=this.enemies.length-1;i>=0;i--){
-      const e=this.enemies[i];moveEnemy(e,dt);e.rotation+=e.spin*dt;
+      const e=this.enemies[i];
+      if(e.boss){
+        e.time+=dt;e.x=WIDTH/2+Math.sin(e.time*.8)*300;e.shotTimer-=dt;
+        if(e.shotTimer<=0){e.shotTimer=Math.max(.45,1.2-this.sector*.2);const aim=Math.atan2(this.player.y-e.y,this.player.x-e.x);
+          for(let n=-2;n<=2;n++){const angle=aim+n*.18;this.bullets.push({x:e.x,y:e.y+30,radius:7,vx:Math.cos(angle)*210,vy:Math.sin(angle)*210});}}
+      } else moveEnemy(e,dt);
+      e.rotation+=e.spin*dt;
       if(e.y>HEIGHT+50){this.enemies.splice(i,1);continue;}
       if(this.handleEnemyCollision(e)){this.enemies.splice(i,1);if(s.over)break;}
     }
     if (s.over)return;
     for(let i=this.lasers.length-1;i>=0;i--){
-      const laser=this.lasers[i];laser.y-=690*dt;
+      const laser=this.lasers[i];laser.y+=laser.vy*dt;laser.x+=laser.vx*dt;
       if(laser.y<-25){this.lasers.splice(i,1);continue;}
       let struck=false;
       for(let j=this.enemies.length-1;j>=0;j--){
         const e=this.enemies[j];
         if(collision(laser,e)) {
-          e.hp--;
+          e.hp-=laser.damage;
           struck=true;
           this.particlesAt(laser.x,laser.y,COLORS.cyan,5,65);
-          if(e.hp<=0){this.enemies.splice(j,1);award(s,e.kind);this.particlesAt(e.x,e.y,e.kind==='asteroid'?COLORS.gold:COLORS.purple,26,210);this.floatingTexts.push({x:e.x,y:e.y,text:`+${ENEMY_TYPES[e.kind].points}`,life:.8});}
+          if(e.hp<=0)this.destroyEnemy(e);
           break;
         }
       }
       if(struck)this.lasers.splice(i,1);
+      if(!this.running)return;
     }
     for(let i=this.particles.length-1;i>=0;i--){const p=this.particles[i];p.x+=p.vx*dt;p.y+=p.vy*dt;p.vx*=.99;p.vy*=.99;p.life-=dt;if(p.life<=0)this.particles.splice(i,1);}
     for(let i=this.floatingTexts.length-1;i>=0;i--){const v=this.floatingTexts[i];v.y-=35*dt;v.life-=dt;if(v.life<=0)this.floatingTexts.splice(i,1);}
@@ -177,13 +255,13 @@ class OrbitWarden {
 
   background(ctx,time){
     const g=ctx.createLinearGradient(0,0,0,HEIGHT);g.addColorStop(0,'#09152f');g.addColorStop(.55,'#070f23');g.addColorStop(1,'#050d1a');ctx.fillStyle=g;ctx.fillRect(0,0,WIDTH,HEIGHT);
-    const glow=ctx.createRadialGradient(WIDTH*.63,HEIGHT*.24,5,WIDTH*.63,HEIGHT*.24,420);glow.addColorStop(0,'#214c6b30');glow.addColorStop(.45,'#16296326');glow.addColorStop(1,'#00111b00');ctx.fillStyle=glow;ctx.fillRect(0,0,WIDTH,HEIGHT);
+    const glow=ctx.createRadialGradient(WIDTH*.63,HEIGHT*.24,5,WIDTH*.63,HEIGHT*.24,420);glow.addColorStop(0,SECTORS[this.sector].color+'30');glow.addColorStop(.45,'#16296326');glow.addColorStop(1,'#00111b00');ctx.fillStyle=glow;ctx.fillRect(0,0,WIDTH,HEIGHT);
     for(const s of this.stars){const y=(s.y+time*14*s.speed)%HEIGHT;ctx.fillStyle=`rgba(155,209,242,${s.light})`;ctx.beginPath();ctx.arc(s.x,y,s.r,0,TAU);ctx.fill();}
     ctx.strokeStyle='#375e8a13';ctx.lineWidth=1;
     for(let x=0;x<WIDTH;x+=80){ctx.beginPath();ctx.moveTo(x,0);ctx.lineTo(x,HEIGHT);ctx.stroke();}
     for(let y=0;y<HEIGHT;y+=80){ctx.beginPath();ctx.moveTo(0,y);ctx.lineTo(WIDTH,y);ctx.stroke();}
     ctx.strokeStyle='#237ac51e';ctx.beginPath();ctx.arc(WIDTH*.68,-130,255,0,Math.PI*2);ctx.stroke();
-    ctx.font='11px monospace';ctx.fillStyle='#6488a050';ctx.fillText('SECTOR 07 / OUTER RIM',WIDTH-230,HEIGHT-27);
+    ctx.font='11px monospace';ctx.fillStyle='#6488a050';ctx.fillText(`SECTOR ${this.sector+1} / ${SECTORS[this.sector].name.toUpperCase()}`,WIDTH-230,HEIGHT-27);
   }
 
   drawAsteroid(ctx,e){
@@ -219,6 +297,11 @@ class OrbitWarden {
     this.background(ctx,this.state.elapsed + time*.00007);
     for(const e of this.enemies){if(e.kind==='asteroid')this.drawAsteroid(ctx,e);else this.drawDrone(ctx,e);}
     for(const l of this.lasers){ctx.save();ctx.strokeStyle=COLORS.cyan;ctx.shadowBlur=19;ctx.shadowColor=COLORS.cyan;ctx.lineWidth=4;ctx.beginPath();ctx.moveTo(l.x,l.y+18);ctx.lineTo(l.x,l.y-20);ctx.stroke();ctx.restore();}
+    for(const b of this.bullets){ctx.fillStyle=COLORS.red;ctx.beginPath();ctx.arc(b.x,b.y,b.radius,0,TAU);ctx.fill();}
+    for(const p of this.pickups){ctx.fillStyle=p.kind==='repair'?'#65ffb0':p.kind==='energy'?COLORS.cyan:COLORS.purple;ctx.strokeStyle=ctx.fillStyle;ctx.strokeRect(p.x-14,p.y-14,28,28);ctx.font='bold 20px monospace';ctx.textAlign='center';ctx.fillText(p.kind==='repair'?'+':p.kind==='energy'?'E':'S',p.x,p.y+7);ctx.textAlign='start';}
+    if(this.novaRing>0){ctx.strokeStyle=COLORS.purple;ctx.lineWidth=6;ctx.beginPath();ctx.arc(this.player.x,this.player.y,(1-this.novaRing)*1100,0,TAU);ctx.stroke();}
+    const boss=this.enemies.find(e=>e.boss);
+    if(boss){ctx.fillStyle='#251b35';ctx.fillRect(240,38,480,10);ctx.fillStyle=COLORS.red;ctx.fillRect(240,38,480*boss.hp/boss.maxHp,10);ctx.textAlign='center';ctx.font='bold 14px monospace';ctx.fillText(SECTORS[this.sector].boss.toUpperCase(),WIDTH/2,30);ctx.textAlign='start';}
     this.drawShip(ctx,time*.001);
     for(const p of this.particles){ctx.globalAlpha=Math.max(0,p.life/p.maxLife);ctx.fillStyle=p.color;ctx.shadowBlur=9;ctx.shadowColor=p.color;ctx.beginPath();ctx.arc(p.x,p.y,p.radius,0,TAU);ctx.fill();}
     ctx.globalAlpha=1;ctx.shadowBlur=0;
@@ -229,6 +312,12 @@ class OrbitWarden {
 
   updateHud(){
     const s=this.state;
+    $('sector-name').textContent=`${this.sector+1} / 3 · ${SECTORS[this.sector].name}`;
+    $('mission-objective').textContent=this.bossSpawned?`Defeat ${SECTORS[this.sector].boss}`:`Survive to commander arrival · ${Math.max(0,Math.ceil(30-this.sectorTime))}s`;
+    $('loadout').textContent=`${WEAPONS[this.weapon].name} MK ${this.upgrade+1} · ${this.kills} kills`;
+    $('dash-action').textContent=`Q · DASH ${this.dashCooldown>0?Math.ceil(this.dashCooldown)+'s':'READY'}`;
+    $('nova-action').textContent=`X · NOVA ${this.novaCooldown>0?Math.ceil(this.novaCooldown)+'s':'READY'}`;
+    for(const button of document.querySelectorAll('[data-weapon]'))button.setAttribute('aria-pressed',String(button.dataset.weapon===this.weapon));
     $('score').textContent=String(s.score).padStart(6,'0');
     $('timer').textContent=prettifyTime(s.elapsed);
     $('difficulty').textContent=`${difficultyAt(s.elapsed).toFixed(1)}×`;

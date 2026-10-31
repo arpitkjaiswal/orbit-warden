@@ -32,3 +32,22 @@ export function chooseEnemy(random = Math.random) {
   const options = ['asteroid','asteroid','asteroid','asteroid','asteroid','drone','drone','drone','zigzag','zigzag','tank'];
   return options[Math.floor(random() * options.length)];
 }
+
+export const SECTORS = Object.freeze([
+  {name: 'Outer Rim', color: '#49e7ff', boss: 'Sentinel', hp: 65},
+  {name: 'Crimson Nebula', color: '#ff698b', boss: 'Ravager', hp: 95},
+  {name: 'Void Citadel', color: '#aa8eff', boss: 'Overlord', hp: 135},
+]);
+export const WEAPONS = Object.freeze({
+  twin: {name: 'Twin laser', cost: 6, cooldown: .16, angles: [0, 0], damage: 1},
+  spread: {name: 'Starburst', cost: 11, cooldown: .25, angles: [-.28, 0, .28], damage: 1},
+  lance: {name: 'Plasma lance', cost: 14, cooldown: .38, angles: [0], damage: 5},
+});
+export function collectSalvage(state, kind) {
+  if(state.over) return state;
+  if(kind === 'repair') state.hp = Math.min(STARTING_HP, state.hp + 1);
+  else if(kind === 'energy') state.energy = MAX_RESOURCE;
+  else if(kind === 'shield') state.shield = MAX_RESOURCE;
+  return state;
+}
+export function canActivate(running, paused, cooldown) { return running && !paused && cooldown <= 0; }
