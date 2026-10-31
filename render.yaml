@@ -1,4 +1,8 @@
 # Render Blueprint: connect this repository to Render, then deploy as a Static Site.
+# Existing owner-managed deployment: https://orbit-warden-1.onrender.com/
+# NOTE: This Blueprint creates a separate Static Site if applied; it does not alter an existing Web Service.
+# For the existing Python Web Service, use build: echo 'Build complete'
+# and start: python -m http.server ${PORT:-10000} --bind 0.0.0.0 --directory web
 services:
   - type: web
     runtime: static
