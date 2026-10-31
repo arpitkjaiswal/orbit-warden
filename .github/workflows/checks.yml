@@ -1,0 +1,26 @@
+name: Game checks
+on:
+  push:
+  pull_request:
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Python gameplay logic tests
+        run: python -m unittest discover -s tests -v
+      - name: Browser game logic tests
+        run: node --test web/tests/*.test.mjs
+      - name: Python syntax compile
+        run: python -m compileall -q orbit_warden
+      - name: Browser JS syntax check
+        run: |
+          node --check web/main.js
+          node --check web/logic.js
+          node --check web/gestures.js

@@ -1,0 +1,10 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import { collision, damage, award, freshState, moveEnemy, difficultyAt, chooseEnemy, scoreOf, ENEMY_TYPES } from '../logic.js';
+test('circles touching count as a collision', () => { assert.equal(collision({x:0,y:0,radius:10},{x:20,y:0,radius:10}), true); assert.equal(collision({x:0,y:0,radius:10},{x:20.1,y:0,radius:10}),false); });
+test('hp reaches zero, ends game, and cannot go negative', () => {let s = freshState(); damage(s, 100); assert.equal(s.hp,0); assert.equal(s.over,true); damage(s); assert.equal(s.hp,0);});
+test('game over rejects further scoring', () => { const s=freshState(); award(s,'drone'); assert.equal(s.score,25); damage(s,5); award(s,'tank'); assert.equal(s.score,25); });
+test('difficulty clamps', () => {assert.equal(difficultyAt(0),1); assert.equal(difficultyAt(-30),1); assert.equal(difficultyAt(10000),3.5);});
+test('enemy motion types are distinct', () => {const source={x:400,baseX:400,y:0,phase:0,time:0,level:1}; const a=moveEnemy({...source,kind:'asteroid'},1); const d=moveEnemy({...source,kind:'drone'},1); assert.equal(a.x,400); assert.notEqual(d.x,400);assert.notEqual(a.y,d.y);});
+test('every opponent scores and has health',()=>{for(const k of Object.keys(ENEMY_TYPES)){assert.ok(scoreOf(k)>0);assert.ok(ENEMY_TYPES[k].hp>0)}});
+test('spawns valid kinds',()=>{ assert.equal(chooseEnemy(()=>0),'asteroid');assert.equal(chooseEnemy(()=>0.999),'tank') });

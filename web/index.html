@@ -1,0 +1,77 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta name="theme-color" content="#070e1d" />
+  <meta name="description" content="Orbit Warden — a neon arcade space defense game with keyboard and optional hand gesture controls." />
+  <title>Orbit Warden — Defend the Orbit</title>
+  <link rel="stylesheet" href="./style.css" />
+</head>
+<body>
+  <div class="shell">
+    <header class="site-header">
+      <div class="brand"><div class="mark"><span>✦</span></div><div><span class="overline">INDEPENDENT ARCADE PROJECT</span><h1>ORBIT <em>WARDEN</em></h1></div></div>
+      <div class="top-right"><span class="status-pulse"></span><span>SECTOR 07 · ACTIVE</span><span class="build">v1.0</span></div>
+    </header>
+    <div class="layout">
+      <main class="main-column">
+        <section class="game-panel" aria-label="Orbit Warden space defense game">
+          <div class="hud">
+            <div class="stat score-stat"><span class="stat-label">MISSION SCORE</span><strong id="score">000000</strong></div>
+            <div class="stat"><span class="stat-label">SURVIVAL TIME</span><strong id="timer">00:00</strong></div>
+            <div class="stat"><span class="stat-label">DIFFICULTY</span><strong id="difficulty">1.0×</strong></div>
+            <div class="stat hp-stat"><span class="stat-label">HULL INTEGRITY</span><strong id="hp" aria-label="5 of 5 health">♥ ♥ ♥ ♥ ♥</strong></div>
+          </div>
+          <div class="canvas-container">
+            <canvas id="game" width="960" height="640" aria-label="Space defense gameplay area" tabindex="0"></canvas>
+            <div class="radar-indicator" aria-hidden="true"><span></span> LIVE THREAT SCAN</div>
+            <div class="overlay" id="overlay">
+              <div class="intro-emblem" aria-hidden="true">✦</div>
+              <div class="eyebrow" id="overlay-eyebrow">INCOMING HOSTILES DETECTED</div>
+              <h2 id="overlay-title">DEFEND THE <span>ORBIT.</span></h2>
+              <p id="overlay-detail">One ship. Endless threats. Hold the line, gather energy, and survive as long as you can.</p>
+              <button class="primary-button" id="start-button" type="button">INITIATE DEFENSE <span>→</span></button>
+              <span class="overlay-hint" id="overlay-hint">ARROW KEYS TO MOVE &nbsp;·&nbsp; SPACE TO FIRE</span>
+            </div>
+          </div>
+          <div class="resource-bar">
+            <div class="resource"><div class="resource-top"><span><i class="energy-dot"></i>WEAPON ENERGY</span><output id="energy-label">100%</output></div><div class="track"><div id="energy-fill" class="fill energy-fill"></div></div></div>
+            <div class="resource"><div class="resource-top"><span><i class="shield-dot"></i>SHIELD CAPACITY</span><output id="shield-label">100%</output></div><div class="track"><div id="shield-fill" class="fill shield-fill"></div></div></div>
+          </div>
+          <div class="game-footer"><span><span class="tiny-led"></span><span id="game-status">STANDBY · AWAITING PILOT</span></span><span id="best-score">PERSONAL BEST 000000</span></div>
+        </section>
+        <div class="mobile-controls" aria-label="Mobile touch controls"><button id="touch-left" type="button">◀ MOVE</button><button id="touch-fire" type="button">FIRE ◎</button><button id="touch-right" type="button">MOVE ▶</button><button id="touch-recharge" type="button">RECHARGE</button><button id="touch-shield" type="button">SHIELD</button></div>
+        <section class="about-section"><span class="section-kicker">THE MISSION</span><h3>Survive the swarm. Protect the frontier.</h3><p>Intercept drifting asteroids, unpredictable attack drones, lightning-fast zigzag fighters, and heavy armored tanks. Each wave gets faster. Stay sharp, manage your resources, and beat your personal best.</p></section>
+      </main>
+      <aside class="sidebar">
+        <section class="side-card controls-card"><div class="card-heading"><span class="iconbox">⌘</span><div><span class="section-kicker">PILOT HANDBOOK</span><h3>Controls</h3></div></div>
+          <div class="control-row"><span>Move spaceship</span><span class="key-group"><kbd>←</kbd><kbd>→</kbd></span></div>
+          <div class="control-row"><span>Fire laser</span><kbd class="wide-key">SPACE</kbd></div>
+          <div class="control-row"><span>Recharge beam</span><kbd>E</kbd></div>
+          <div class="control-row"><span>Activate shield</span><kbd>SHIFT</kbd></div>
+          <div class="control-row"><span>Pause game</span><kbd>P</kbd></div>
+          <div class="control-row"><span>Restart</span><kbd>R</kbd></div>
+          <p class="helper-text">You can also use A and D to steer. Movement works alongside gesture control.</p>
+        </section>
+        <section class="side-card gesture-card"><div class="card-heading"><span class="iconbox purple">◉</span><div><span class="section-kicker">EXPERIMENTAL INPUT</span><h3>Gesture Control</h3></div></div>
+          <div class="camera-preview"><video id="camera" autoplay muted playsinline></video><canvas id="hand-overlay" width="320" height="180"></canvas><div class="camera-placeholder" id="camera-placeholder"><div class="camera-ring">◎</div><span>CAMERA OFFLINE</span></div><span class="camera-label" id="camera-label">NO FEED</span></div>
+          <div class="gesture-readout"><span>DETECTED GESTURE</span><strong id="gesture-name">NONE</strong></div>
+          <div class="gesture-readout"><span>SMOOTHING CONFIDENCE</span><strong id="gesture-confidence">—</strong></div>
+          <button id="gesture-toggle" class="secondary-button" type="button">ENABLE CAMERA CONTROL <span>↗</span></button>
+          <p id="gesture-status" class="helper-text" aria-live="polite">Optional webcam tracking with MediaPipe. The camera is off until you enable it.</p>
+          <div class="gesture-help"><span>☝ Index = fire</span><span>✊ Fist = shield</span><span>✋ Open = recharge</span><span>↔ Move hand = steer</span></div>
+        </section>
+        <section class="side-card intel-card"><div class="card-heading"><span class="iconbox orange">⌁</span><div><span class="section-kicker">THREAT INTELLIGENCE</span><h3>Enemy Types</h3></div></div>
+          <div class="enemy-row"><span class="enemy-glyph asteroid-glyph">⬡</span><div><strong>Asteroid</strong><small>Slow descent · 10 pts</small></div><span class="enemy-points">+10</span></div>
+          <div class="enemy-row"><span class="enemy-glyph drone-glyph">◈</span><div><strong>Attack Drone</strong><small>Sine-wave flight · 25 pts</small></div><span class="enemy-points">+25</span></div>
+          <div class="enemy-row"><span class="enemy-glyph zigzag-glyph">⟡</span><div><strong>Phantom</strong><small>Fast evasive path · 35 pts</small></div><span class="enemy-points">+35</span></div>
+          <div class="enemy-row"><span class="enemy-glyph tank-glyph">⬢</span><div><strong>Siege Tank</strong><small>Armored hull · 50 pts</small></div><span class="enemy-points">+50</span></div>
+        </section>
+      </aside>
+    </div>
+    <footer class="site-footer"><span>ORBIT WARDEN // PROCEDURAL ARCADE DEFENSE</span><span>BUILT FOR THE FRONTIER <span class="footer-star">✦</span></span></footer>
+  </div>
+  <script type="module" src="./main.js"></script>
+</body>
+</html>

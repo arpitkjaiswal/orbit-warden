@@ -1,0 +1,11 @@
+# Render Blueprint: connect this repository to Render, then deploy as a Static Site.
+services:
+  - type: web
+    runtime: static
+    name: orbit-warden
+    buildCommand: echo 'Orbit Warden static assets ready'
+    staticPublishPath: ./web
+    headers:
+      - path: /*
+        name: X-Content-Type-Options
+        value: nosniff
