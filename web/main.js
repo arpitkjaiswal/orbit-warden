@@ -1,4 +1,5 @@
 import {WIDTH, HEIGHT, STARTING_HP, ENEMY_TYPES, clamp, collision, difficultyAt, damage, freshState, chooseEnemy, moveEnemy, SECTORS, WEAPONS, collectSalvage, canActivate} from './logic.js';
+import {GesturePower} from './gesture-logic.js';
 import {GestureTracker} from './gestures.js';
 
 const $ = (id) => document.getElementById(id);
@@ -15,6 +16,7 @@ class OrbitWarden {
     this.input = new Set();
     this.stars = Array.from({length: 180}, () => ({ x: Math.random()*WIDTH, y: Math.random()*HEIGHT, r: random(.5,2), speed: random(.15, 1.0), light: random(.15,.8) }));
     this.gestures = new GestureTracker({video:$('camera'), overlay:$('hand-overlay'), placeholder:$('camera-placeholder'), button:$('gesture-toggle'), label:$('gesture-name'), confidence:$('gesture-confidence'), status:$('gesture-status'), feedLabel:$('camera-label')});
+    this.gesturePower=new GesturePower();
     this.best = this.readBest();
     this.running = false;
     this.paused = false;
@@ -23,6 +25,7 @@ class OrbitWarden {
     this.attachControls();
     document.querySelectorAll('[data-weapon]').forEach(button=>button.addEventListener('click',()=>this.action(`Digit${button.dataset.slot}`)));
     $('dash-action').addEventListener('click',()=>this.action('KeyQ'));
+    $('overdrive-action').addEventListener('click',()=>this.action('KeyZ'));
     $('nova-action').addEventListener('click',()=>this.action('KeyX'));
     this.updateHud();
     requestAnimationFrame(t => this.frame(t));
@@ -38,6 +41,8 @@ class OrbitWarden {
     this.sector = 0; this.sectorTime = 0; this.bossSpawned = false;
     this.bullets = []; this.pickups = []; this.weapon = 'twin'; this.upgrade = 0;
     this.dashCooldown = 0; this.novaCooldown = 0; this.novaRing = 0; this.kills = 0;
+    this.overdrive=0;this.overdriveCooldown=0;this.target=null;this.bank=0;
+    this.gesturePower.reset();
     this.spawnTimer = .7;
     this.fireCooldown = 0;
     this.hitCooldown = 0;
@@ -49,7 +54,7 @@ class OrbitWarden {
   }
 
   attachControls() {
-    const relevant = new Set(['ArrowLeft','ArrowRight','ArrowUp','ArrowDown','Space','ShiftLeft','ShiftRight','KeyW','KeyS','KeyQ','KeyX','Digit1','Digit2','Digit3','KeyA','KeyD','KeyE','KeyP','KeyR','Escape','KeyG']);
+    const relevant = new Set(['ArrowLeft','ArrowRight','ArrowUp','ArrowDown','Space','ShiftLeft','ShiftRight','KeyZ','KeyW','KeyS','KeyQ','KeyX','Digit1','Digit2','Digit3','KeyA','KeyD','KeyE','KeyP','KeyR','Escape','KeyG']);
     window.addEventListener('keydown', (event) => {
       if (relevant.has(event.code)) event.preventDefault();
       if (event.repeat && ['KeyP','KeyR','KeyG'].includes(event.code)) return;
@@ -62,7 +67,7 @@ class OrbitWarden {
       if (event.code === 'Space' && !this.running && !this.state.over && !this.paused) this.start();
     });
     window.addEventListener('keyup', (e) => this.input.delete(e.code));
-    window.addEventListener('blur', () => this.input.clear());
+    window.addEventListener('blur', () => {this.input.clear();this.pause();});
     $('start-button').addEventListener('click', () => { if (this.paused) this.resume(); else this.start(); });
     for (const [id,key] of [['touch-left','ArrowLeft'],['touch-right','ArrowRight'],['touch-fire','Space'],['touch-recharge','KeyE'],['touch-shield','ShiftLeft'],['touch-up','ArrowUp'],['touch-down','ArrowDown'],['touch-dash','KeyQ'],['touch-nova','KeyX']]) {
       const node=$(id);
@@ -83,6 +88,10 @@ class OrbitWarden {
       this.particlesAt(this.player.x,this.player.y,COLORS.purple,30,230);
       this.player.x=clamp(this.player.x+direction*190,35,WIDTH-35);
       this.hitCooldown= .65; this.dashCooldown=4;
+    }
+    if(key==='KeyZ' && canActivate(this.running,this.paused,this.overdriveCooldown)){
+      this.overdrive=6;this.overdriveCooldown=16;this.state.energy=100;
+      this.particlesAt(this.player.x,this.player.y,COLORS.gold,45,240);
     }
     if(key === 'KeyX' && canActivate(this.running,this.paused,this.novaCooldown)) {
       this.novaCooldown=18; this.novaRing=1; this.bullets=[]; this.shake=.35;
@@ -117,7 +126,7 @@ class OrbitWarden {
     $('overlay').classList.add('hidden');
     this.canvas.focus({preventScroll:true});
   }
-  pause() {if (!this.running || this.paused) return;this.paused=true;this.showOverlay('PAUSED', 'Take a moment. Your sector is secure for now.', 'RESUME MISSION', 'MISSION SUSPENDED', 'P TO RESUME · R TO RESTART');}
+  pause() {if (!this.running || this.paused) return;this.paused=true;this.gesturePower.reset();this.showOverlay('PAUSED', 'Take a moment. Your sector is secure for now.', 'RESUME MISSION', 'MISSION SUSPENDED', 'P TO RESUME · R TO RESTART');}
   resume() {if(!this.paused)return;this.paused=false;$('overlay').classList.add('hidden');this.canvas.focus({preventScroll:true});}
   togglePause() {if (this.paused) this.resume(); else this.pause();}
   gameOver() {
@@ -153,12 +162,15 @@ class OrbitWarden {
   fire() {
     const weapon=WEAPONS[this.weapon];
     if(this.fireCooldown>0 || this.state.energy<weapon.cost || this.state.over)return;
-    this.fireCooldown=weapon.cooldown;
+    this.fireCooldown=weapon.cooldown*(this.overdrive>0?.5:1);
+    const target=$('aim-assist').checked?this.enemies.filter(e=>e.y<this.player.y-30).sort((a,b)=>Math.hypot(a.x-this.player.x,a.y-this.player.y)-Math.hypot(b.x-this.player.x,b.y-this.player.y))[0]:null;
+    this.target=target;
+    const aim=target?clamp(Math.atan2(target.x-this.player.x,this.player.y-target.y),-.65,.65):0;
     this.state.energy-=weapon.cost;
-    weapon.angles.forEach((angle,i)=>this.lasers.push({
+    weapon.angles.forEach((offset,i)=>{const angle=offset+aim;this.lasers.push({
       x:this.player.x+(this.weapon==='twin'?(i===0?-9:9):0),y:this.player.y-25,radius:this.weapon==='lance'?9:5,
-      vx:Math.sin(angle)*690,vy:-Math.cos(angle)*690,damage:weapon.damage+this.upgrade,
-    }));
+      vx:Math.sin(angle)*690,vy:-Math.cos(angle)*690,damage:weapon.damage+this.upgrade+(this.overdrive>0?1:0),color:this.overdrive>0?COLORS.gold:this.weapon==='lance'?COLORS.purple:COLORS.cyan,
+    });});
     this.particlesAt(this.player.x,this.player.y-28,COLORS.cyan,4,40);
   }
 
@@ -181,20 +193,28 @@ class OrbitWarden {
     this.gestures.tick(now);
     if (!this.running || this.paused) return;
     const s=this.state;
+    this.overdrive=Math.max(0,this.overdrive-dt);this.overdriveCooldown=Math.max(0,this.overdriveCooldown-dt);
+    const camera=this.gestures.enabled && this.gestures.tracking;
+    const pose=camera?this.gestures.label:'none';
+    const power=this.gesturePower.update(pose,dt);
+    if(power)this.action(power==='nova'?'KeyX':'KeyZ');
     s.elapsed += dt; this.sectorTime+=dt;
     this.dashCooldown=Math.max(0,this.dashCooldown-dt); this.novaCooldown=Math.max(0,this.novaCooldown-dt); this.novaRing=Math.max(0,this.novaRing-dt);
     const dy=Number(this.input.has('ArrowDown')||this.input.has('KeyS'))-Number(this.input.has('ArrowUp')||this.input.has('KeyW'));
-    this.player.y=clamp(this.player.y+dy*300*dt,100,HEIGHT-45);
+    if(dy)this.player.y+=dy*300*dt;
+    else if(camera)this.player.y=lerp(this.player.y,140+this.gestures.y*(HEIGHT-190),Math.min(1,dt*8));
+    this.player.y=clamp(this.player.y,100,HEIGHT-45);
     if(this.sectorTime>=30 && !this.bossSpawned) {
       this.bossSpawned=true; const spec=SECTORS[this.sector];
       this.enemies.push({kind:'tank',boss:true,x:WIDTH/2,y:90,radius:55,hp:spec.hp,maxHp:spec.hp,time:0,shotTimer:1,rotation:0,spin:0});
     }
     for(let i=this.pickups.length-1;i>=0;i--){
       const p=this.pickups[i]; p.y+=85*dt;
+      if(Math.hypot(p.x-this.player.x,p.y-this.player.y)<140){p.x=lerp(p.x,this.player.x,Math.min(1,dt*5));p.y=lerp(p.y,this.player.y,Math.min(1,dt*5));}
       if(collision(p,this.player)){collectSalvage(s,p.kind);this.pickups.splice(i,1);this.floatingTexts.push({x:p.x,y:p.y,text:p.kind.toUpperCase(),life:.8});}
       else if(p.y>HEIGHT+20)this.pickups.splice(i,1);
     }
-    this.shielding=(this.input.has('ShiftLeft')||this.input.has('ShiftRight')||(this.gestures.enabled && this.gestures.label==='shield')) && s.shield>0;
+    this.shielding=(this.input.has('ShiftLeft')||this.input.has('ShiftRight')||(camera && pose==='shield')) && s.shield>0;
     for(let i=this.bullets.length-1;i>=0;i--){
       const b=this.bullets[i]; b.x+=b.vx*dt;b.y+=b.vy*dt;
       if(collision(b,this.player)){
@@ -210,14 +230,15 @@ class OrbitWarden {
     this.flash=Math.max(0,this.flash-dt);
     const dx=Number(this.input.has('ArrowRight')||this.input.has('KeyD'))-Number(this.input.has('ArrowLeft')||this.input.has('KeyA'));
     if(dx)this.player.x+=dx*390*dt;
-    else if(this.gestures.enabled && this.gestures.label!=='none')this.player.x=lerp(this.player.x,45+this.gestures.x*(WIDTH-90),Math.min(1,dt*7));
+    else if(camera)this.player.x=lerp(this.player.x,45+this.gestures.x*(WIDTH-90),Math.min(1,dt*7));
+    this.bank=lerp(this.bank,dx*.2,Math.min(1,dt*8));
     this.player.x=clamp(this.player.x,35,WIDTH-35);
-    this.shielding=(this.input.has('ShiftLeft')||this.input.has('ShiftRight')||(this.gestures.enabled && this.gestures.label==='shield')) && s.shield>0;
-    this.beaming=(this.input.has('KeyE')||(this.gestures.enabled && this.gestures.label==='recharge')) && !this.shielding;
+    this.shielding=(this.input.has('ShiftLeft')||this.input.has('ShiftRight')||(camera && pose==='shield')) && s.shield>0;
+    this.beaming=(this.input.has('KeyE')||(camera && pose==='recharge')) && !this.shielding;
     if(this.shielding)s.shield=clamp(s.shield-38*dt,0,100);
     else s.shield=clamp(s.shield+10*dt,0,100);
-    s.energy=clamp(s.energy+(this.beaming?38:14)*dt,0,100);
-    if(this.input.has('Space')||(this.gestures.enabled&&this.gestures.label==='fire'))this.fire();
+    s.energy=clamp(s.energy+(this.beaming?65:this.overdrive>0?35:20)*dt,0,100);
+    if(this.input.has('Space')||(camera && (pose==='fire'||($('camera-autofire').checked && ['move','nova','overdrive'].includes(pose)))))this.fire();
     this.spawnTimer-=dt;
     if(this.spawnTimer<=0 && !this.bossSpawned){this.spawnEnemy();const level=difficultyAt(s.elapsed);this.spawnTimer=random(.4,.85)/level;}
     for(let i=this.enemies.length-1;i>=0;i--){
@@ -234,7 +255,7 @@ class OrbitWarden {
     if (s.over)return;
     for(let i=this.lasers.length-1;i>=0;i--){
       const laser=this.lasers[i];laser.y+=laser.vy*dt;laser.x+=laser.vx*dt;
-      if(laser.y<-25){this.lasers.splice(i,1);continue;}
+      if(laser.y<-25 || laser.x< -30 || laser.x>WIDTH+30){this.lasers.splice(i,1);continue;}
       let struck=false;
       for(let j=this.enemies.length-1;j>=0;j--){
         const e=this.enemies[j];
@@ -283,12 +304,30 @@ class OrbitWarden {
   drawShip(ctx,time){
     const {x,y}=this.player;
     if(this.beaming){const g=ctx.createLinearGradient(x,0,x,y);g.addColorStop(0,'#49d9f700');g.addColorStop(1,'#49d9f73e');ctx.fillStyle=g;ctx.beginPath();ctx.moveTo(x-95,0);ctx.lineTo(x+95,0);ctx.lineTo(x+18,y-25);ctx.lineTo(x-18,y-25);ctx.closePath();ctx.fill();ctx.strokeStyle='#4ce5ff70';ctx.lineWidth=2;ctx.setLineDash([12,10]);ctx.beginPath();ctx.moveTo(x,0);ctx.lineTo(x,y-25);ctx.stroke();ctx.setLineDash([]);}
-    ctx.save();ctx.translate(x,y);if(this.hitCooldown>0&&Math.floor(time*16)%2===0)ctx.globalAlpha=.45;
-    ctx.shadowColor='#36c6ff';ctx.shadowBlur=27;
-    ctx.fillStyle='#dbeeff';ctx.strokeStyle=COLORS.cyan;ctx.lineWidth=3;
-    ctx.beginPath();ctx.moveTo(0,-31);ctx.lineTo(-31,26);ctx.lineTo(-10,17);ctx.lineTo(0,8);ctx.lineTo(10,17);ctx.lineTo(31,26);ctx.closePath();ctx.fill();ctx.stroke();ctx.shadowBlur=0;
-    ctx.fillStyle='#21466d';ctx.beginPath();ctx.moveTo(0,-17);ctx.lineTo(-9,8);ctx.lineTo(9,8);ctx.closePath();ctx.fill();
-    ctx.fillStyle='#f1a7ff';const flame=12+Math.sin(time*28)*5;ctx.beginPath();ctx.moveTo(-9,22);ctx.lineTo(0,22+flame+random(0,5));ctx.lineTo(9,22);ctx.closePath();ctx.fill();ctx.restore();
+    ctx.save();ctx.translate(x,y);ctx.rotate(this.bank);
+    if(this.hitCooldown>0&&Math.floor(time*16)%2===0)ctx.globalAlpha=.5;
+    const accent=this.overdrive>0?COLORS.gold:COLORS.cyan;
+    // Twin engine plumes, armor wings, recessed canopy and independent cannons.
+    ctx.shadowColor=accent;ctx.shadowBlur=this.overdrive>0?35:18;
+    for(const side of [-1,1]){
+      const ex=side*19,flame=22+Math.sin(time*35)*7+(this.overdrive>0?25:0);
+      const exhaust=ctx.createLinearGradient(0,20,0,20+flame);
+      exhaust.addColorStop(0,'#f5faff');exhaust.addColorStop(.3,accent);exhaust.addColorStop(1,'#49e7ff00');
+      ctx.fillStyle=exhaust;ctx.beginPath();ctx.moveTo(ex-7,22);ctx.lineTo(ex+7,22);ctx.lineTo(ex+3,22+flame);ctx.lineTo(ex-3,22+flame);ctx.closePath();ctx.fill();
+      ctx.fillStyle='#142a49';ctx.strokeStyle=accent;ctx.lineWidth=2;
+      ctx.beginPath();ctx.moveTo(side*10,-8);ctx.lineTo(side*41,22);ctx.lineTo(side*37,32);ctx.lineTo(side*12,19);ctx.closePath();ctx.fill();ctx.stroke();
+      ctx.fillStyle='#a9c8e1';ctx.fillRect(side*29-3,-8,6,29);ctx.fillStyle=accent;ctx.fillRect(side*29-2,-12,4,9);
+    }
+    const armor=ctx.createLinearGradient(-16,0,16,0);armor.addColorStop(0,'#3c5b7b');armor.addColorStop(.5,'#edf7ff');armor.addColorStop(1,'#6488a7');
+    ctx.fillStyle=armor;ctx.strokeStyle=accent;ctx.lineWidth=2;
+    ctx.beginPath();ctx.moveTo(0,-39);ctx.lineTo(16,6);ctx.lineTo(13,28);ctx.lineTo(-13,28);ctx.lineTo(-16,6);ctx.closePath();ctx.fill();ctx.stroke();
+    ctx.shadowBlur=8;ctx.fillStyle='#081c38';ctx.beginPath();ctx.moveTo(0,-24);ctx.lineTo(8,1);ctx.lineTo(0,9);ctx.lineTo(-8,1);ctx.closePath();ctx.fill();ctx.stroke();
+    ctx.fillStyle=accent;ctx.fillRect(-3,13,6,9);ctx.restore();
+    if(this.overdrive>0){ctx.save();ctx.translate(x,y);ctx.rotate(-time*2);ctx.strokeStyle=COLORS.gold;ctx.lineWidth=2;ctx.setLineDash([13,9]);ctx.beginPath();ctx.arc(0,0,54,0,TAU);ctx.stroke();ctx.restore();}
+    if(this.target && this.enemies.includes(this.target)){
+      const t=this.target;ctx.save();ctx.strokeStyle=accent;ctx.globalAlpha=.6;ctx.lineWidth=1;ctx.setLineDash([5,5]);ctx.beginPath();ctx.arc(t.x,t.y,t.radius+9,0,TAU);ctx.stroke();ctx.restore();
+    }
+
     if(this.shielding){ctx.save();ctx.strokeStyle=COLORS.cyan;ctx.shadowColor=COLORS.cyan;ctx.shadowBlur=24;ctx.lineWidth=3;ctx.beginPath();ctx.arc(x,y,43,0,TAU);ctx.stroke();ctx.globalAlpha=.14;ctx.fillStyle=COLORS.cyan;ctx.fill();ctx.restore();}
   }
   render(time){
@@ -296,7 +335,7 @@ class OrbitWarden {
     ctx.save();if(this.shake>0){ctx.translate(random(-7,7)*this.shake*4,random(-7,7)*this.shake*4);}
     this.background(ctx,this.state.elapsed + time*.00007);
     for(const e of this.enemies){if(e.kind==='asteroid')this.drawAsteroid(ctx,e);else this.drawDrone(ctx,e);}
-    for(const l of this.lasers){ctx.save();ctx.strokeStyle=COLORS.cyan;ctx.shadowBlur=19;ctx.shadowColor=COLORS.cyan;ctx.lineWidth=4;ctx.beginPath();ctx.moveTo(l.x,l.y+18);ctx.lineTo(l.x,l.y-20);ctx.stroke();ctx.restore();}
+    for(const l of this.lasers){ctx.save();ctx.strokeStyle=l.color||COLORS.cyan;ctx.shadowBlur=19;ctx.shadowColor=ctx.strokeStyle;ctx.lineWidth=l.radius>5?7:4;const angle=Math.atan2(l.vx,-l.vy);ctx.beginPath();ctx.moveTo(l.x-Math.sin(angle)*18,l.y+Math.cos(angle)*18);ctx.lineTo(l.x+Math.sin(angle)*20,l.y-Math.cos(angle)*20);ctx.stroke();ctx.restore();}
     for(const b of this.bullets){ctx.fillStyle=COLORS.red;ctx.beginPath();ctx.arc(b.x,b.y,b.radius,0,TAU);ctx.fill();}
     for(const p of this.pickups){ctx.fillStyle=p.kind==='repair'?'#65ffb0':p.kind==='energy'?COLORS.cyan:COLORS.purple;ctx.strokeStyle=ctx.fillStyle;ctx.strokeRect(p.x-14,p.y-14,28,28);ctx.font='bold 20px monospace';ctx.textAlign='center';ctx.fillText(p.kind==='repair'?'+':p.kind==='energy'?'E':'S',p.x,p.y+7);ctx.textAlign='start';}
     if(this.novaRing>0){ctx.strokeStyle=COLORS.purple;ctx.lineWidth=6;ctx.beginPath();ctx.arc(this.player.x,this.player.y,(1-this.novaRing)*1100,0,TAU);ctx.stroke();}
@@ -318,6 +357,8 @@ class OrbitWarden {
     $('dash-action').textContent=`Q · DASH ${this.dashCooldown>0?Math.ceil(this.dashCooldown)+'s':'READY'}`;
     $('nova-action').textContent=`X · NOVA ${this.novaCooldown>0?Math.ceil(this.novaCooldown)+'s':'READY'}`;
     for(const button of document.querySelectorAll('[data-weapon]'))button.setAttribute('aria-pressed',String(button.dataset.weapon===this.weapon));
+    $('overdrive-action').textContent=this.overdrive>0?`Z · OVERDRIVE ${Math.ceil(this.overdrive)}s`:`Z · OVERDRIVE ${this.overdriveCooldown>0?Math.ceil(this.overdriveCooldown)+'s':'READY'}`;
+    $('power-status').textContent=this.gestures.enabled?(this.gestures.tracking?`HAND LINKED · ${this.gestures.label.toUpperCase()}${this.gesturePower.progress>0?' · '+Math.round(this.gesturePower.progress*100)+'%':''}`:'SHOW YOUR HAND · POWERS SAFE'):'CAMERA OFF · KEYBOARD READY';
     $('score').textContent=String(s.score).padStart(6,'0');
     $('timer').textContent=prettifyTime(s.elapsed);
     $('difficulty').textContent=`${difficultyAt(s.elapsed).toFixed(1)}×`;

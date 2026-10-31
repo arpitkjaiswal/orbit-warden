@@ -1,3 +1,4 @@
+import {classifyHand, handPosition} from './gesture-logic.js';
 /** Webcam-only, opt-in gesture tracking via MediaPipe Tasks Vision.
  * No images are uploaded by this application. MediaPipe may make its own telemetry requests.
  * User-provided trained classifiers have not been bundled.
@@ -25,6 +26,8 @@ export class GestureTracker {
     this.label = 'none';
     this.confidence = 0;
     this.x = 0.5;
+    this.y = .65;
+    this.tracking = false;
     this.history = [];
     this.lastVideoTime = -1;
     this.lastInference = 0;
@@ -46,38 +49,44 @@ export class GestureTracker {
     this.statusEl.textContent = 'Requesting webcam permission and loading MediaPipe…';
     this.button.disabled = true;
     try {
-      this.stream = await navigator.mediaDevices.getUserMedia({video: {width: 640, height: 360, facingMode: 'user'}, audio: false});
-      if (generation !== this.generation) return;
-      this.video.srcObject = this.stream;
+      const stream = await navigator.mediaDevices.getUserMedia({video: {width: 640, height: 360, facingMode: 'user'}, audio: false});
+      if (generation !== this.generation) {stream.getTracks().forEach(track=>track.stop());return;}
+      this.stream=stream;
+      stream.getVideoTracks()[0]?.addEventListener('ended',()=>{if(this.stream===stream)this.disable();});
+      this.video.srcObject = stream;
       await this.video.play();
       if (generation !== this.generation) return;
       const {FilesetResolver, HandLandmarker} = await import(`${CDN}/+esm`);
       const vision = await FilesetResolver.forVisionTasks(`${CDN}/wasm`);
-      this.landmarker = await HandLandmarker.createFromOptions(vision, {
+      const landmarker = await HandLandmarker.createFromOptions(vision, {
         baseOptions: {modelAssetPath: DEFAULT_MODEL, delegate: 'CPU'},
         runningMode: 'VIDEO',
         numHands: 1,
         minHandDetectionConfidence: 0.6,
         minTrackingConfidence: 0.6,
       });
-      if (generation !== this.generation) { this.landmarker.close(); this.landmarker=null; return; }
+      if (generation !== this.generation) {landmarker.close();return;}
+      this.landmarker=landmarker;
+      this.lastVideoTime=-1;this.lastInference=0;this.lastHandsSeen=0;
       this.enabled = true;
       this.placeholder.classList.add('hidden');
       this.feedLabelEl.textContent = 'LIVE · ON DEVICE';
       this.button.innerHTML = 'DISABLE CAMERA CONTROL <span>×</span>';
-      this.statusEl.textContent = 'Move your hand horizontally to steer. Open palm: charge; fist: shield; index: fire.';
+      this.statusEl.textContent = 'Hand moves ship in 2D. Auto-fire assists steering. Fist: shield; palm: recharge; pinch: overdrive; hold peace sign: nova.';
     } catch (err) {
+      if(generation!==this.generation)return;
       this.disable();
       this.statusEl.textContent = `Camera unavailable: ${err?.message || 'permission denied or model unavailable'}`;
     } finally {
-      this.loading = false;
-      this.button.disabled = false;
+      if(generation===this.generation || !this.loading){this.loading = false;this.button.disabled = false;}
     }
   }
 
   disable() {
     this.generation++;
     this.enabled = false;
+    this.loading=false;this.button.disabled=false;
+    this.releaseHand();
     this.stream?.getTracks().forEach(track => track.stop());
     this.stream = null;
     this.video.srcObject = null;
@@ -95,13 +104,12 @@ export class GestureTracker {
     this.statusEl.textContent = 'Camera is off. Keyboard controls are always available.';
   }
 
-  inferGesture(points) {
-    const fingers = [[8, 6], [12, 10], [16, 14], [20, 18]].map(([tip, pip]) => points[tip].y < points[pip].y - 0.025);
-    const extended = fingers.filter(Boolean).length;
-    if (extended === 0) return 'shield';
-    if (extended === 4) return 'recharge';
-    if (extended === 1 && fingers[0]) return 'fire';
-    return 'move';
+  inferGesture(points) { return classifyHand(points); }
+
+  releaseHand() {
+    this.tracking=false;this.label='none';this.history=[];this.confidence=0;
+    this.labelEl.textContent='NO HAND';this.confidenceEl.textContent='—';
+    this.ctx.clearRect(0,0,this.overlay.width,this.overlay.height);
   }
 
   push(label) {
@@ -119,6 +127,7 @@ export class GestureTracker {
   }
 
   tick(now) {
+    if(this.enabled && now-this.lastHandsSeen>300)this.releaseHand();
     if (!this.enabled || !this.landmarker || this.video.readyState < 2 || now - this.lastInference < 70) return;
     if (this.video.currentTime === this.lastVideoTime) return;
     this.lastVideoTime = this.video.currentTime;
@@ -128,12 +137,17 @@ export class GestureTracker {
     catch (err) {this.statusEl.textContent = `Tracking error: ${err.message}`; this.disable(); return;}
     const points = hands?.[0];
     if (!points) {
-      this.push('none');
+      this.releaseHand();
+      this.feedLabelEl.textContent='NO HAND · POWERS SAFE';
       this.ctx.clearRect(0, 0, this.overlay.width, this.overlay.height);
       return;
     }
     // Mirrored video matches a mirror-style gesture interface; both x and overlay use the same reflection.
-    this.x = smooth(this.x, 1 - points[9].x, 0.28);
+    this.lastHandsSeen=now;this.tracking=true;
+    this.feedLabelEl.textContent='LIVE · ON DEVICE';
+    const position=handPosition(points);
+    this.x = smooth(this.x,position.x,.4);
+    this.y = smooth(this.y,position.y,.4);
     this.push(this.inferGesture(points));
     this.drawSkeleton(points);
   }

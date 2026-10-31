@@ -26,12 +26,14 @@ Open **http://localhost:8000**. There is no `npm install` step for core gameplay
 
 | Action | Keyboard | Gesture (optional) |
 | --- | --- | --- |
-| Move | Left/Right or A/D | Move hand left/right |
+| Move | Arrow keys or WASD | Move hand left/right and up/down |
 | Shoot | Space | Index finger only |
 | Recharge beam | E | Open hand (four fingers extended) |
 | Shield | Shift | Closed fist |
 | Pause/resume | P | Keyboard only |
 | Restart | R | Keyboard only |
+| Overdrive | Z or on-screen button | Hold thumb/index pinch 0.45s |
+| Nova | X or on-screen button | Hold peace sign 0.8s |
 
 Touch controls appear on smaller screens. Hand labels use a seven-frame majority vote, confidence threshold, and smoothed palm position. Keyboard steering overrides gestures, and the webcam is off by default. Browser webcam access requires **HTTPS** (Render provides this) or **localhost**, and permission from the player.
 
@@ -130,3 +132,23 @@ The browser edition now features three sectors: **Outer Rim â†’ Crimson Nebula â
 - **Commanders:** aimed five-shot volleys, increasing hull strength, visible health bars, and sector rewards.
 
 Touch controls include vertical movement, dash, and nova. Existing fire, shield, recharge, pause, and gesture controls remain available. These campaign additions apply to the browser edition; the original desktop edition keeps its survival gameplay.
+
+## Aegis ship and camera combat (v2.1)
+
+The browser ship now has armored wings, twin cannons, animated engines, banking, a target reticle, and a rotating overdrive aura. Salvage within 140 game pixels is drawn toward the ship. **Aim assist** (enabled below the arena) aims toward the nearest enemy ahead within the cannons' turning limit; uncheck it for straight manual shots.
+
+**Z / OVERDRIVE** activates six seconds of double firing speed and +1 damage per projectile, refills weapon energy, and starts a 16-second cooldown. Its golden cannons and engine aura indicate when it is active. All weapons benefit; it does not grant invulnerability. Q remains the invulnerable dash and X remains nova. Overdrive, nova, and dash buttons work with mouse or touch.
+
+### Camera quick start
+
+1. Start the mission, press **G** or **Enable camera control**, and allow camera permission. Use HTTPS or localhost. The camera stays off until requested; disable with G or the same button.
+2. Keep one whole hand visible in good light, fingers pointing upward. Move the hand left/right and up/down to fly. Movement uses a central camera area so you do not have to reach the edges. Keyboard movement overrides the camera on each axis.
+3. **Index finger:** fire. **Fist:** shield. **Open palm:** recharge quickly. **Thumb/index pinch held 0.45 seconds:** overdrive. **Peace sign held 0.8 seconds:** nova. Release the power pose before using it again; cooldowns still apply. If a power is on cooldown, release and retry when its button says READY.
+4. **Camera auto-fire**, enabled below the arena, shoots while steering or holding a power pose. Fist and palm stop auto-fire so you can defend and refill. Uncheck camera auto-fire for index-only shooting. Aim assist works with keyboard, touch, and camera alike.
+5. Watch the camera's pose/confidence readout and HAND LINKED status. A hold percentage indicates power preparation. When the hand disappears or the feed stalls, camera movement and continuous powers stop; an already activated overdrive finishes its timed burst. Previously fired shots keep moving. Returning a hand must establish a new stable pose. Switching tabs pauses the mission.
+
+Allow camera permission in browser site settings if denied. If model loading fails, verify access to `cdn.jsdelivr.net` and `storage.googleapis.com` and reload. Model/wasm files download on enable; images are processed on the device and this application does not upload camera frames. Keyboard and touch remain usable without camera assets. Actual webcam recognition and permission prompts require testing on the player's device; automated tests use synthetic landmarks and simulated tracking.
+
+### Development validation
+
+No package installation or build is needed for core browser gameplay. Start from the repository root with `python -m http.server 8000 --directory web`. Run `node --test web/tests/*.test.mjs` (Node 22 as in CI, or Node 24). For explicit per-test reporting on Node 24, use `node --test --test-isolation=none web/tests/*.test.mjs`. Also run `python -m unittest discover -s tests -v` and JavaScript syntax checks for `web/main.js`, `web/logic.js`, `web/gestures.js`, and `web/gesture-logic.js`. The new gesture tests cover pose geometry, hold/release gating, lost/frozen tracking, and camera shutdown. Desktop Pygame controls are unchanged.

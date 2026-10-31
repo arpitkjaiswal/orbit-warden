@@ -17,7 +17,7 @@
   <div class="shell">
     <header class="site-header">
       <div class="brand"><div class="mark"><span>✦</span></div><div><span class="overline">INDEPENDENT ARCADE PROJECT</span><h1>ORBIT <em>WARDEN</em></h1></div></div>
-      <div class="top-right"><span class="status-pulse"></span><span>SECTOR 07 · ACTIVE</span><a class="live-link" href="https://orbit-warden-1.onrender.com/" aria-label="Play Orbit Warden at the live Render deployment">PLAY LIVE ↗</a><span class="build">v2.0</span></div>
+      <div class="top-right"><span class="status-pulse"></span><span>SECTOR 07 · ACTIVE</span><a class="live-link" href="https://orbit-warden-1.onrender.com/" aria-label="Play Orbit Warden at the live Render deployment">PLAY LIVE ↗</a><span class="build">v2.1</span></div>
     </header>
     <div class="layout">
       <main class="main-column">
@@ -43,8 +43,8 @@
           </div>
           <div class="arsenal" aria-label="Weapons and abilities">
             <div class="weapon-choices"><button data-weapon="twin" data-slot="1" aria-pressed="true">1 · TWIN</button><button data-weapon="spread" data-slot="2" aria-pressed="false">2 · SPREAD</button><button data-weapon="lance" data-slot="3" aria-pressed="false">3 · LANCE</button></div>
-            <div class="ability-choices"><button id="dash-action">Q · DASH READY</button><button id="nova-action">X · NOVA READY</button></div>
-            <span id="loadout">Twin laser MK 1 · 0 kills</span>
+            <div class="ability-choices"><button id="dash-action">Q · DASH READY</button><button id="nova-action">X · NOVA READY</button><button id="overdrive-action">Z · OVERDRIVE READY</button></div>
+            <div class="assist-options"><label><input id="aim-assist" type="checkbox" checked> Aim assist</label><label><input id="camera-autofire" type="checkbox" checked> Camera auto-fire</label></div><span id="loadout">Twin laser MK 1 · 0 kills</span>
           </div>
           <div class="resource-bar">
             <div class="resource"><div class="resource-top"><span><i class="energy-dot"></i>WEAPON ENERGY</span><output id="energy-label">100%</output></div><div class="track"><div id="energy-fill" class="fill energy-fill"></div></div></div>
@@ -53,7 +53,7 @@
           <div class="game-footer"><span><span class="tiny-led"></span><span id="game-status">STANDBY · AWAITING PILOT</span></span><span id="best-score">PERSONAL BEST 000000</span></div>
         </section>
         <div class="mobile-controls" aria-label="Mobile touch controls"><button id="touch-left" type="button">◀ MOVE</button><button id="touch-fire" type="button">FIRE ◎</button><button id="touch-right" type="button">MOVE ▶</button><button id="touch-recharge" type="button">RECHARGE</button><button id="touch-shield" type="button">SHIELD</button><button id="touch-up" type="button">▲ UP</button><button id="touch-down" type="button">▼ DOWN</button><button id="touch-dash" type="button">DASH</button><button id="touch-nova" type="button">NOVA</button></div>
-        <section class="about-section"><span class="section-kicker">THE MISSION</span><h3>Three sectors. Three commanders. One galaxy.</h3><p>Fight through the Outer Rim, Crimson Nebula, and Void Citadel. Every fifth kill drops repair, energy, or shield salvage. Survive 30 seconds in each sector to challenge its commander. Boss victories repair your hull and permanently upgrade your weapons for this run. Dash grants brief invulnerability; nova clears hostile shots and blasts every enemy. Complete all three sectors to win.</p></section>
+        <section class="about-section"><span class="section-kicker">THE MISSION</span><h3>Three sectors. Three commanders. One galaxy.</h3><p>Fight through the Outer Rim, Crimson Nebula, and Void Citadel. Every fifth kill drops repair, energy, or shield salvage. Survive 30 seconds in each sector to challenge its commander. Boss victories repair your hull and permanently upgrade your weapons for this run. Dash grants brief invulnerability; nova clears hostile shots and blasts every enemy. The Aegis fighter adds twin wing cannons, a salvage magnet, aim assist, and a six-second overdrive that doubles firing speed and boosts damage. Switch aim assist or camera auto-fire off below the arena for manual combat. Complete all three sectors to win.</p></section>
       </main>
       <aside class="sidebar">
         <section class="side-card controls-card"><div class="card-heading"><span class="iconbox">⌘</span><div><span class="section-kicker">PILOT HANDBOOK</span><h3>Controls</h3></div></div>
@@ -64,7 +64,7 @@
           <div class="control-row"><span>Switch weapon</span><kbd>1 / 2 / 3</kbd></div>
           <div class="control-row"><span>Dash · 4s cooldown</span><kbd>Q</kbd></div>
           <div class="control-row"><span>Nova · 18s cooldown</span><kbd>X</kbd></div>
-          <div class="control-row"><span>Pause game</span><kbd>P</kbd></div>
+          <div class="control-row"><span>Overdrive · 6s burst</span><kbd>Z</kbd></div><div class="control-row"><span>Camera on/off</span><kbd>G</kbd></div><div class="control-row"><span>Pause game</span><kbd>P</kbd></div>
           <div class="control-row"><span>Restart</span><kbd>R</kbd></div>
           <p class="helper-text">Use arrow keys or WASD to fly in all directions. Dash follows left steering, otherwise right. You can also tap weapon and ability buttons below the arena.</p>
         </section>
@@ -73,8 +73,10 @@
           <div class="gesture-readout"><span>DETECTED GESTURE</span><strong id="gesture-name">NONE</strong></div>
           <div class="gesture-readout"><span>SMOOTHING CONFIDENCE</span><strong id="gesture-confidence">—</strong></div>
           <button id="gesture-toggle" class="secondary-button" type="button">ENABLE CAMERA CONTROL <span>↗</span></button>
+          <div id="power-status" class="power-status" role="status">CAMERA OFF · KEYBOARD READY</div>
           <p id="gesture-status" class="helper-text" aria-live="polite">Optional webcam tracking with MediaPipe. The camera is off until you enable it.</p>
-          <div class="gesture-help"><span>☝ Index = fire</span><span>✊ Fist = shield</span><span>✋ Open = recharge</span><span>↔ Move hand = steer</span></div>
+          <div class="gesture-help"><span>☝ Index = fire</span><span>✊ Fist = shield</span><span>✋ Palm = recharge</span><span>↔ ↕ Hand = fly</span><span>🤏 Pinch = overdrive</span><span>✌ Hold = nova</span></div>
+          <p class="helper-text">Start a mission, then enable the camera (G). Keep one whole hand visible, fingers pointing up, in good light. Pinch for 0.45s or hold a peace sign for 0.8s; release before repeating. Aim assist and camera auto-fire help you fight. Palm and fist stop automatic fire. If tracking disappears, hand movement and powers stop. Use keyboard or touch at any time. HTTPS or localhost is required; allow camera permission. Camera processing happens on your device.</p>
         </section>
         <section class="side-card intel-card"><div class="card-heading"><span class="iconbox orange">⌁</span><div><span class="section-kicker">THREAT INTELLIGENCE</span><h3>Enemy Types</h3></div></div>
           <div class="enemy-row"><span class="enemy-glyph asteroid-glyph">⬡</span><div><strong>Asteroid</strong><small>Slow descent · 10 pts</small></div><span class="enemy-points">+10</span></div>
