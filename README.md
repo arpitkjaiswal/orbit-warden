@@ -1,5 +1,10 @@
 # Orbit Warden — neon orbital-defense game
 
+[![Play Orbit Warden](https://img.shields.io/badge/PLAY%20NOW-ORBIT%20WARDEN-21c9e8?style=for-the-badge&logo=render&logoColor=white)](https://orbit-warden-1.onrender.com)
+
+**Live web game:** [https://orbit-warden-1.onrender.com](https://orbit-warden-1.onrender.com)  
+**Source code:** [github.com/arpitkjaiswal/orbit-warden](https://github.com/arpitkjaiswal/orbit-warden)
+
 A polished, procedurally drawn 2D arcade defense game with **two editions**:
 
 - **Browser edition** (`web/`): responsive Canvas + JavaScript, deployable on Render Static Sites, keyboard/touch inputs, opt-in MediaPipe webcam hand landmarks, and a visual gesture-control panel.
@@ -34,11 +39,13 @@ Gestures are heuristic classifications built on a pre-trained MediaPipe hand-lan
 
 ## Deploy the browser edition to Render
 
+The published deployment URL is **[orbit-warden-1.onrender.com](https://orbit-warden-1.onrender.com)** (provided by the project owner). The site's live health was not independently verified during this documentation update.
+
 The included `render.yaml` defines a **Render Static Site** that publishes `./web`. It requires no GUI server or running Python process.
 
 1. In your Render account choose **New → Blueprint**, connect this `arpitkjaiswal/orbit-warden` GitHub repository, and apply `render.yaml`.
 2. Alternatively choose **New → Static Site**, select this repository and the `main` branch, set **Publish Directory = web** and **Build Command = echo ready**.
-3. Open your Render HTTPS URL to play and grant webcam permission only if you want optional gesture controls. Automatic deploys can be enabled for further pushes.
+3. Open [the live deployment](https://orbit-warden-1.onrender.com) and grant webcam permission only if you want optional gesture controls. Automatic deploys can be enabled for further pushes.
 
 **Do not run the Pygame desktop window as a Render Python web service**; desktop GUI apps are not browser pages. The browser edition is a JavaScript port sharing the same gameplay concepts.
 
@@ -75,6 +82,8 @@ python -m orbit_warden
 Press **G** to toggle webcam tracking. A *trusted compatible* previously trained Python gesture classifier can be loaded by setting `ORBIT_GESTURE_MODEL=/path/to/model.joblib`. It must accept 63 numeric (x,y,z) hand landmark features and predict `move`, `fire`, `shield`, `recharge`, or `none`. **Never load untrusted joblib files.** A Python classifier does not automatically run in a static browser deployment.
 
 ## Quality checks
+
+After pushing, review [GitHub Actions](https://github.com/arpitkjaiswal/orbit-warden/actions) for the CI status. To test the hosted game, visit [the Render URL](https://orbit-warden-1.onrender.com) and verify the game loads, keyboard inputs work, and (if enabled) webcam permissions can be granted. Live browser hardware testing is separate from the unit tests.
 
 ```sh
 python -m unittest discover -s tests -v
