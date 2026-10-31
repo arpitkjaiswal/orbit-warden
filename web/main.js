@@ -1,6 +1,7 @@
+import {InputState} from './input.js';
 import {SHIPS, UPGRADES, newLoadout, applyUpgrade, upgradeChoices, bossVolley, BADGES, readBadges} from './adventure.js';
 import {Feedback} from './feedback.js';
-import {WIDTH, HEIGHT, ENEMY_TYPES, clamp, collision, difficultyAt, damage, freshState, chooseEnemy, moveEnemy, SECTORS, WEAPONS, collectSalvage, canActivate, FLIGHT_MODES, sweptCollision, assistedTarget} from './logic.js';
+import {WIDTH, HEIGHT, ENEMY_TYPES, clamp, collision, difficultyAt, damage, freshState, chooseEnemy, moveEnemy, SECTORS, WEAPONS, collectSalvage, canActivate, FLIGHT_MODES, sweptCollision, firstCollision, assistedTarget} from './logic.js';
 import {GesturePower} from './gesture-logic.js';
 import {GestureTracker} from './gestures.js';
 
@@ -11,13 +12,15 @@ const random = (min, max) => min + Math.random() * (max - min);
 const lerp = (a,b,t) => a+(b-a)*t;
 const prettifyTime = (seconds) => `${String(Math.floor(seconds / 60)).padStart(2,'0')}:${String(Math.floor(seconds % 60)).padStart(2,'0')}`;
 
-class OrbitWarden {
+export class OrbitWarden {
   constructor() {
     this.canvas = $('game');
     this.ctx = this.canvas.getContext('2d');
-    this.input = new Set();
+    this.controls=new InputState();this.input=this.controls.held;
     this.stars = Array.from({length: 180}, () => ({ x: Math.random()*WIDTH, y: Math.random()*HEIGHT, r: random(.5,2), speed: random(.15, 1.0), light: random(.15,.8) }));
-    this.gestures = new GestureTracker({video:$('camera'), overlay:$('hand-overlay'), placeholder:$('camera-placeholder'), button:$('gesture-toggle'), label:$('gesture-name'), confidence:$('gesture-confidence'), status:$('gesture-status'), feedLabel:$('camera-label')});
+    this.gestures = new GestureTracker({video:$('camera'), overlay:$('hand-overlay'), placeholder:$('camera-placeholder'), button:$('gesture-toggle'), label:$('gesture-name'), confidence:$('gesture-confidence'), status:$('gesture-status'), feedLabel:$('camera-label'),onFailure:message=>{
+      if(this.running&&!this.refitting&&!this.practicing){this.pause();this.showOverlay('CAMERA DISCONNECTED',message+' Use keyboard/touch, or enable the camera again.','RESUME MISSION','PILOT SAFETY','CAMERA INPUT HAS BEEN RELEASED');}
+    }});
     this.gesturePower=new GesturePower();
     this.feedback=new Feedback();
     try{this.badges=readBadges(localStorage.getItem('orbit-warden-badges'));}catch{this.badges=[];}
@@ -27,12 +30,12 @@ class OrbitWarden {
     this.lastFrame = performance.now();
     this.reset();
     this.attachControls();
-    document.querySelectorAll('[data-weapon]').forEach(button=>button.addEventListener('click',()=>this.action(`Digit${button.dataset.slot}`)));
-    $('dash-action').addEventListener('click',()=>this.action('KeyQ'));
-    $('overdrive-action').addEventListener('click',()=>this.action('KeyZ'));
-    $('missile-action').addEventListener('click',()=>this.action('KeyC'));
+    document.querySelectorAll('[data-weapon]').forEach(button=>button.addEventListener('click',()=>this.activate(`Digit${button.dataset.slot}`)));
+    $('dash-action').addEventListener('click',()=>this.activate('KeyQ'));
+    $('overdrive-action').addEventListener('click',()=>this.activate('KeyZ'));
+    $('missile-action').addEventListener('click',()=>this.activate('KeyC'));
     $('refit-choices').addEventListener('click',event=>{const button=event.target.closest('[data-upgrade]');if(button)this.chooseUpgrade(button.dataset.upgrade);});
-    $('nova-action').addEventListener('click',()=>this.action('KeyX'));
+    $('nova-action').addEventListener('click',()=>this.activate('KeyX'));
     $('center-hand').addEventListener('click',()=>{this.pause();this.gestures.calibrate();});
     $('hand-reach').addEventListener('input',()=>{this.gestures.steering.sensitivity=Number($('hand-reach').value);$('reach-value').textContent=`${$('hand-reach').value}×`;});
     $('hand-smoothing').addEventListener('input',()=>{this.gestures.steering.smoothing=Number($('hand-smoothing').value);});
@@ -70,7 +73,7 @@ class OrbitWarden {
     this.shielding = false;
     this.shake = 0;
     this.flash = 0;
-    this.input.clear();
+    this.controls.clear();
   }
 
   attachControls() {
@@ -84,29 +87,41 @@ class OrbitWarden {
         if(['Digit1','Digit2','Digit3'].includes(event.code))this.chooseUpgrade(upgradeChoices(this.sector)[Number(event.code.at(-1))-1]);
         return;
       }
-      if(event.target?.matches('input,select,button') && !['Escape','KeyP'].includes(event.code))return;
+      if(event.target?.closest('input,select,textarea,[contenteditable="true"]') && !['Escape','KeyP'].includes(event.code))return;
+      if(event.target?.closest('button,summary,a') && ['Space','Enter'].includes(event.code))return;
+      if(!relevant.has(event.code))return;
       if (relevant.has(event.code)) event.preventDefault();
       if (event.repeat && ['KeyP','KeyR','KeyG'].includes(event.code)) return;
-      this.input.add(event.code);
+      if(event.code==='Space'&&!this.running&&!this.state.over&&!this.paused&&!this.practicing)this.start();
+      this.controls.press(event.code,`key:${event.code}`);
       if (!event.repeat) this.action(event.code);
       if (event.code === 'KeyP') this.togglePause();
       if (event.code === 'KeyR') this.start();
       if (event.code === 'KeyG' && !event.repeat) this.gestures.toggle();
       if (event.code === 'Escape' && this.running && !this.paused) this.togglePause();
-      if (event.code === 'Space' && !this.running && !this.state.over && !this.paused) this.start();
     });
-    window.addEventListener('keyup', (e) => this.input.delete(e.code));
-    window.addEventListener('blur', () => {this.input.clear();this.pause();});
+    window.addEventListener('keyup', (e) => this.controls.release(`key:${e.code}`));
+    for(const type of ['pointerup','pointercancel'])window.addEventListener(type,event=>this.controls.release(`pointer:${event.pointerId}`));
+    window.addEventListener('blur', () => {this.controls.clear();this.pause();});
     $('start-button').addEventListener('click', () => { if (this.paused) this.resume(); else this.start(); });
     for (const [id,key] of [['touch-left','ArrowLeft'],['touch-right','ArrowRight'],['touch-fire','Space'],['touch-recharge','KeyE'],['touch-shield','ShiftLeft'],['touch-up','ArrowUp'],['touch-down','ArrowDown'],['touch-dash','KeyQ'],['touch-nova','KeyX']]) {
       const node=$(id);
-      const down=(event)=>{event.preventDefault();if(!this.running && !this.paused)this.start();this.input.add(key);this.action(key);node.setPointerCapture?.(event.pointerId);};
-      const up=(event)=>{event.preventDefault();this.input.delete(key);};
+      const down=(event)=>{
+        event.preventDefault();if(!this.running&&!this.paused&&!this.practicing&&!this.refitting)this.start();
+        this.controls.press(key,`pointer:${event.pointerId}`);this.action(key);
+        try{node.setPointerCapture?.(event.pointerId);}catch{ /* Synthetic events and released pointers need no capture. */ }
+      };
+      const up=(event)=>{event.preventDefault();this.controls.release(`pointer:${event.pointerId}`);};
       node.addEventListener('pointerdown',down);
       node.addEventListener('pointerup',up);
       node.addEventListener('pointercancel',up);
       node.addEventListener('lostpointercapture',up);
     }
+  }
+
+  activate(key){
+    this.action(key);
+    if(this.running&&!this.paused&&!this.practicing)this.canvas.focus({preventScroll:true});
   }
 
   action(key) {
@@ -133,12 +148,13 @@ class OrbitWarden {
       for(const enemy of [...this.enemies]) {
         enemy.hp-=30;
         if(enemy.hp<=0) this.destroyEnemy(enemy);
+        if(!this.running||this.refitting)break;
       }
     }
-    if(this.running&&!this.paused)this.canvas.focus({preventScroll:true});
   }
 
   destroyEnemy(enemy,source='weapon') {
+    if(!this.running||this.paused||this.practicing||this.state.over)return;
     const index=this.enemies.indexOf(enemy); if(index<0)return;
     this.enemies.splice(index,1); this.kills++;
     this.unlockBadge('first');if(source==='missile'){this.missileKills++;if(this.missileKills>=10)this.unlockBadge('missile');}
@@ -173,7 +189,7 @@ class OrbitWarden {
     for(const key of Object.keys(BADGES)){const tag=document.createElement('span');tag.className=this.badges.includes(key)?'badge unlocked':'badge';tag.textContent=(this.badges.includes(key)?'✦ ':'◇ ')+BADGES[key];holder.append(tag);}
   }
   beginRefit(){
-    this.refitting=true;this.paused=true;this.input.clear();this.gesturePower.reset();
+    this.refitting=true;this.paused=true;this.controls.clear();this.gesturePower.reset();
     $('overlay').classList.add('hidden');$('refit-overlay').classList.remove('hidden');
     $('refit-label').textContent=`${SECTORS[this.sector].name} cleared · choose your next upgrade`;
     $('refit-choices').replaceChildren();
@@ -198,10 +214,10 @@ class OrbitWarden {
       if(!this.enemies.includes(m.target))m.target=assistedTarget(this.enemies,m)||this.enemies.find(e=>e.y<HEIGHT);
       if(m.target){const a=Math.atan2(m.target.y-m.y,m.target.x-m.x);m.vx=lerp(m.vx,Math.cos(a)*440,1-Math.exp(-dt*8));m.vy=lerp(m.vy,Math.sin(a)*440,1-Math.exp(-dt*8));}
       const from={x:m.x,y:m.y};m.x+=m.vx*dt;m.y+=m.vy*dt;
-      const hit=this.enemies.find(e=>sweptCollision(from,m,e));
+      const hit=firstCollision(from,m,this.enemies);
       if(hit){
         this.particlesAt(m.x,m.y,COLORS.gold,20,180);
-        for(const e of [...this.enemies])if(Math.hypot(e.x-hit.x,e.y-hit.y)<75){e.hp-=this.mods.missileDamage;if(e.hp<=0)this.destroyEnemy(e,'missile');}
+        for(const e of [...this.enemies])if(Math.hypot(e.x-hit.x,e.y-hit.y)<75){e.hp-=this.mods.missileDamage;if(e.hp<=0)this.destroyEnemy(e,'missile');if(this.refitting||!this.running)break;}
         this.missiles.splice(i,1);if(this.refitting||!this.running)return;
       }else if(m.life<=0||m.y< -70||m.y>HEIGHT+70||m.x< -70||m.x>WIDTH+70)this.missiles.splice(i,1);
     }
@@ -213,7 +229,7 @@ class OrbitWarden {
   }
   beginPractice(){
     if(this.refitting)return;
-    this.pause();this.practicing=true;this.practicePlayer={x:WIDTH/2,y:HEIGHT-90,radius:12};this.practicePower.reset();
+    this.pause();this.controls.clear();this.practicing=true;this.practicePlayer={x:WIDTH/2,y:HEIGHT-90,radius:12};this.practicePower.reset();
     $('overlay').classList.add('hidden');this.canvas.focus({preventScroll:true});
   }
   endPractice(){
@@ -239,7 +255,7 @@ class OrbitWarden {
     this.feedback.play('hit');this.announce(this.state.hp===1?'HULL CRITICAL · COLLECT REPAIR SALVAGE':'HULL HIT · SHIELD OR DASH TO EVADE');
     if(this.state.over)this.gameOver();
   }
-  pause() {if (!this.running || this.paused || this.refitting) return;this.paused=true;this.input.clear();this.gesturePower.reset();this.showOverlay('PAUSED', 'Take a moment. Your sector is secure for now.', 'RESUME MISSION', 'MISSION SUSPENDED', 'P TO RESUME · R TO RESTART');}
+  pause() {if (!this.running || this.paused || this.refitting) return;this.paused=true;this.controls.clear();this.gesturePower.reset();this.showOverlay('PAUSED', 'Take a moment. Your sector is secure for now.', 'RESUME MISSION', 'MISSION SUSPENDED', 'P TO RESUME · R TO RESTART');}
   resume() {if(!this.paused||this.refitting)return;this.paused=false;$('overlay').classList.add('hidden');this.canvas.focus({preventScroll:true});}
   togglePause() {if(this.practicing)return;if (this.paused) this.resume(); else this.pause();}
   gameOver() {
@@ -255,6 +271,7 @@ class OrbitWarden {
     $('overlay-eyebrow').textContent=eyebrow;
     $('overlay-hint').textContent=hint;
     $('overlay').classList.remove('hidden');
+    $('start-button').focus({preventScroll:true});
   }
 
   spawnEnemy(forcedKind=null) {
@@ -304,7 +321,7 @@ class OrbitWarden {
   update(dt,now) {
     this.gestures.tick(now);
     const camera=this.gestures.enabled && this.gestures.tracking;
-    if(this.practicing){this.steerPlayer(this.practicePlayer,dt,camera);if(!camera)this.practicePower.reset();this.practicePower.update(camera?this.gestures.label:'none',dt);return;}
+    if(this.practicing){this.steerPlayer(this.practicePlayer,dt,camera);this.practicePower.update(camera?this.gestures.label:'none',dt);return;}
     if (!this.running || this.paused) return;
     const s=this.state;
     if(camera){this.handLostTime=0;}
@@ -315,7 +332,6 @@ class OrbitWarden {
       }
     }
     const pose=camera?this.gestures.label:'none';
-    if(!camera)this.gesturePower.reset();
     const power=this.gesturePower.update(pose,dt);
     if(power)this.action(power==='nova'?'KeyX':power==='missiles'?'KeyC':'KeyZ');
     if(!this.running||this.paused)return;
@@ -353,7 +369,7 @@ class OrbitWarden {
       const b=this.bullets[i],from={x:b.x,y:b.y};b.x+=b.vx*dt;b.y+=b.vy*dt;
       if(sweptCollision(from,b,this.player)){
         if(this.shielding && s.shield>0)s.shield=clamp(s.shield-12,0,100);else this.takeHit();
-        this.bullets.splice(i,1);
+        this.bullets.splice(i,1);if(s.over)return;
       }else if(b.y>HEIGHT+30 || b.y< -30 || b.x< -30 || b.x>WIDTH+30)this.bullets.splice(i,1);
     }
     if(s.over)return;
@@ -380,14 +396,15 @@ class OrbitWarden {
       }
       e.rotation+=e.spin*dt;
       if(e.y>HEIGHT+50){this.enemies.splice(i,1);continue;}
-      if(this.handleEnemyCollision(e)){this.enemies.splice(i,1);if(s.over)break;}
+      if(this.handleEnemyCollision(e))this.enemies.splice(i,1);
+      if(s.over)return;
     }
     if(s.over)return;
     this.updateMissiles(dt);if(this.refitting||!this.running)return;
     const shotSector=this.sector;
     for(let i=this.lasers.length-1;i>=0;i--){
       const laser=this.lasers[i],from={x:laser.x,y:laser.y};laser.y+=laser.vy*dt;laser.x+=laser.vx*dt;
-      const enemy=this.enemies.find(e=>sweptCollision(from,laser,e));
+      const enemy=firstCollision(from,laser,this.enemies);
       if(enemy){enemy.hp-=laser.damage;this.particlesAt(laser.x,laser.y,laser.color||COLORS.cyan,5,65);if(enemy.hp<=0)this.destroyEnemy(enemy);}
       if(enemy||laser.y< -25||laser.x< -30||laser.x>WIDTH+30)this.lasers.splice(i,1);
       if(!this.running || this.refitting || this.sector!==shotSector)return;
@@ -521,4 +538,5 @@ class OrbitWarden {
   }
 }
 
-new OrbitWarden();
+export let game=null;
+if(typeof document!=='undefined')game=new OrbitWarden();

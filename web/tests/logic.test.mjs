@@ -46,3 +46,9 @@ test('aim assist preserves a stable target and excludes unreachable targets',asy
  current.hp=0;assert.equal(assistedTarget([current,near,behind,wide],player,current),near);
  assert.equal(assistedTarget([behind,wide],player),null);
 });
+test('projectiles strike the nearest intersected enemy regardless of spawn order',async()=>{
+ const {firstCollision,collisionTime}=await import('../logic.js');
+ const near={x:100,y:150,radius:17},far={x:100,y:100,radius:17},from={x:100,y:200},to={x:100,y:50,radius:5};
+ assert.equal(firstCollision(from,to,[far,near]),near);assert.ok(collisionTime(from,to,near)<collisionTime(from,to,far));
+ assert.equal(firstCollision({x:200,y:200},{x:200,y:50,radius:5},[far,near]),null);
+});

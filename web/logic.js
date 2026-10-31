@@ -59,10 +59,20 @@ export const FLIGHT_MODES = Object.freeze({
   standard: {name:'Standard', speed:1, projectileSpeed:1, hitbox:16},
   ace: {name:'Ace', speed:1.2, projectileSpeed:1.15, hitbox:18},
 });
-export function sweptCollision(from,to,circle) {
-  const dx=to.x-from.x,dy=to.y-from.y,length=dx*dx+dy*dy;
-  const t=length?clamp(((circle.x-from.x)*dx+(circle.y-from.y)*dy)/length,0,1):0;
-  return collision({x:from.x+dx*t,y:from.y+dy*t,radius:to.radius},circle);
+export function collisionTime(from,to,circle) {
+  const dx=to.x-from.x,dy=to.y-from.y,fx=from.x-circle.x,fy=from.y-circle.y;
+  const radius=to.radius+circle.radius,c=fx*fx+fy*fy-radius*radius;
+  if(c<=0)return 0;
+  const a=dx*dx+dy*dy;if(!a)return null;
+  const b=2*(fx*dx+fy*dy),discriminant=b*b-4*a*c;if(discriminant<0)return null;
+  const t=(-b-Math.sqrt(discriminant))/(2*a);
+  return t>=0&&t<=1?t:null;
+}
+export const sweptCollision=(from,to,circle)=>collisionTime(from,to,circle)!==null;
+export function firstCollision(from,to,circles){
+  let first=null,earliest=Infinity;
+  for(const circle of circles){const time=collisionTime(from,to,circle);if(time!==null&&time<earliest){earliest=time;first=circle;}}
+  return first;
 }
 export function assistedTarget(enemies,player,previous=null) {
   const valid=e=>e.hp>0 && e.y<player.y-30 && Math.abs(Math.atan2(e.x-player.x,player.y-e.y))<=.7;

@@ -1,7 +1,10 @@
 /** Landmark-only helpers: no camera, DOM or model downloads needed. */
 const distance = (a,b) => Math.hypot(a.x-b.x,a.y-b.y,(a.z??0)-(b.z??0));
+export function validLandmarks(points){
+  return Array.isArray(points)&&points.length===21&&points.every(p=>p&&Number.isFinite(p.x)&&Number.isFinite(p.y)&&Number.isFinite(p.z??0));
+}
 export function classifyHand(points) {
-  if(!points || points.length!==21 || points.some(p=>!Number.isFinite(p.x)||!Number.isFinite(p.y)))return 'none';
+  if(!validLandmarks(points))return 'none';
   const scale=distance(points[0],points[9]);
   if(scale<.02)return 'none';
   const fingers=[[8,6],[12,10],[16,14],[20,18]].map(([tip,joint])=>distance(points[0],points[tip])>distance(points[0],points[joint])*1.16);

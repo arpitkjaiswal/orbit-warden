@@ -26,10 +26,10 @@ test('powers require holds and release; hand loss clears accumulated hold',()=>{
  for(let i=0;i<4;i++)assert.equal(power.update('overdrive',.1),null);
  assert.equal(power.update('overdrive',.1),'overdrive');power.reset();assert.equal(power.progress,0);
 });
-function tracker(){
+function tracker(options={}){
  const element=()=>({textContent:'',innerHTML:'',disabled:false,classList:{add(){},remove(){}},addEventListener(){}});
  const ctx={clearRect(){},beginPath(){},moveTo(){},lineTo(){},stroke(){},arc(){},fill(){}};
- return new GestureTracker({video:{readyState:2,currentTime:1},overlay:{width:320,height:180,getContext:()=>ctx},placeholder:element(),button:element(),label:element(),confidence:element(),status:element(),feedLabel:element()});
+ return new GestureTracker({video:{readyState:2,currentTime:1},overlay:{width:320,height:180,getContext:()=>ctx},placeholder:element(),button:element(),label:element(),confidence:element(),status:element(),feedLabel:element(),...options});
 }
 test('missing hand releases immediately and frozen video expires tracking',()=>{
  const t=tracker();t.enabled=true;t.landmarker={detectForVideo:()=>({landmarks:[]})};t.tracking=true;t.label='fire';t.lastHandsSeen=990;
@@ -80,4 +80,31 @@ test('three-finger missile pose confirms and requires a held, released action',(
  assert.equal(classifyHand(hand([true,true,true,false])),'missiles');
  const power=new GesturePower();for(let i=0;i<10;i++)assert.equal(power.update('missiles',.05),null);
  assert.equal(power.update('missiles',.05),'missiles');for(let i=0;i<30;i++)assert.equal(power.update('missiles',.05),null);
+});
+
+test('malformed landmarks release intent without throwing',()=>{
+ const invalid=hand();invalid[7]=null;assert.equal(classifyHand(invalid),'none');
+ const depth=hand();depth[4].z=NaN;assert.equal(classifyHand(depth),'none');
+ const t=tracker();t.enabled=true;t.landmarker={detectForVideo:()=>({landmarks:[invalid]})};t.tracking=true;t.label='fire';t.lastHandsSeen=990;t.tick(1000);assert.equal(t.tracking,false);assert.equal(t.label,'none');
+});
+test('hand overlay follows the actual camera dimensions, including portrait video',()=>{
+ const t=tracker();t.video.videoWidth=480;t.video.videoHeight=640;t.syncOverlaySize();assert.equal(t.overlay.width,480);assert.equal(t.overlay.height,640);
+});
+test('cancelling during detector initialization stops the stream and closes the late detector',async()=>{
+ const original=Object.getOwnPropertyDescriptor(globalThis,'navigator');let finish,stopped=0,closed=0;
+ Object.defineProperty(globalThis,'navigator',{configurable:true,value:{mediaDevices:{getUserMedia:async()=>({getTracks:()=>[{stop:()=>stopped++}],getVideoTracks:()=>[]})}}});
+ try{
+  const t=tracker({createDetector:()=>new Promise(resolve=>finish=resolve)});t.video.play=async()=>{};const pending=t.enable();
+  await new Promise(resolve=>setImmediate(resolve));t.disable();finish({close:()=>closed++});await pending;
+  assert.equal(stopped,1);assert.equal(closed,1);assert.equal(t.enabled,false);assert.equal(t.stream,null);
+ }finally{if(original)Object.defineProperty(globalThis,'navigator',original);else delete globalThis.navigator;}
+});
+test('a disconnected camera releases resources and reports the failure to the game',async()=>{
+ const original=Object.getOwnPropertyDescriptor(globalThis,'navigator');let ended,stopped=0,failure='';
+ const stream={getTracks:()=>[{stop:()=>stopped++}],getVideoTracks:()=>[{addEventListener:(type,callback)=>ended=callback}]};
+ Object.defineProperty(globalThis,'navigator',{configurable:true,value:{mediaDevices:{getUserMedia:async()=>stream}}});
+ try{
+  const t=tracker({createDetector:async()=>({close(){}}),onFailure:message=>failure=message});t.video.play=async()=>{};await t.enable();ended();
+  assert.equal(t.enabled,false);assert.equal(stopped,1);assert.match(failure,/stream ended/);assert.equal(t.label,'none');assert.equal(t.stream,null);
+ }finally{if(original)Object.defineProperty(globalThis,'navigator',original);else delete globalThis.navigator;}
 });

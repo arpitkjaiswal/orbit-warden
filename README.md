@@ -10,7 +10,7 @@ A polished, procedurally drawn 2D arcade defense game with **two editions**:
 - **Browser edition** (`web/`): responsive Canvas + JavaScript, deployable on Render Static Sites, keyboard/touch inputs, opt-in MediaPipe webcam hand landmarks, and a visual gesture-control panel.
 - **Desktop edition** (`orbit_warden/`): original Python/Pygame game, optional local MediaPipe control and trusted `.joblib` gesture classifier loading.
 
-Both editions include asteroids, wave-moving drones, zigzag fighters, heavy armored tanks, collision detection, five starting HP, score/time/difficulty HUD, laser weapon, energy recharge beam, shields, cooldowns, particles, game-over, and restart.
+Both editions include asteroids, wave-moving drones, zigzag fighters, heavy armored tanks, collision detection, ship health, score/time/difficulty HUD, laser weapon, energy recharge beam, shields, cooldowns, particles, game-over, and restart.
 
 ## Play the browser edition locally
 
@@ -189,3 +189,12 @@ Push the tested release to the existing GitHub `main` branch. If the connected R
 ## Shared game and camera view (v3.0.1)
 
 The live camera is docked inside the same cockpit frame as the arena: beside it on desktop and directly beneath it on phones. Pose feedback, camera enable/disable, hand centering, and power hold progress stay with the feed. Open **Tune controls & gesture guide** for reach, smoothing, steering mode, and camera help. The camera remains off until explicitly enabled; this layout reuses the same video and tracking canvas rather than opening another stream.
+
+
+## Reliability fixes (v3.0.2)
+
+Keyboard keys and individual touch pointers are now tracked separately, so releasing one control cannot cancel another held control. Touch input in Control Lab stays in practice; holding Space from standby starts the mission and keeps firing. Shortcuts work after clicking camera/action buttons while text fields, selectors, and native button activation keep normal keyboard behavior.
+
+Nova and missile splash stop immediately at victory and refit boundaries. Projectiles hit the nearest enemy along their traveled path. Camera cancellation releases pending resources; disconnects and tracking failures pause an active mission with a recovery message. The hand overlay follows the actual video dimensions, including portrait cameras. No physical webcam is enabled by the automated checks.
+
+Run the normal unit tests as documented above. For the reusable full browser regression suite, run `node scripts/browser-smoke.cjs` from the repository root. It requires an available Playwright package and Chromium (the cloud environment already provides both); optionally set `CHROMIUM_PATH` to an installed Chromium executable. It starts and closes its own local test server. The suite covers input regressions, synthetic camera permissions/disconnects and portrait video, campaign progression, refits, achievements, touch controls, and six cockpit screen sizes. Physical hand recognition and a live Render release require separate device/live-site validation. CI runs the Node/Python suites and all application JavaScript syntax checks; the optional browser suite runs separately.

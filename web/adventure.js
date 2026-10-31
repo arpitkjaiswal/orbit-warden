@@ -8,7 +8,7 @@ export const UPGRADES=Object.freeze({
   reactor:{name:'Quantum reactor',description:'Weapon energy costs −25%; passive recharge +8/s.'},
   armor:{name:'Titanium hull',description:'Maximum hull +2. Repair two hull points now.'},
   missiles:{name:'Warhead array',description:'Missile damage +4; refill the missile magazine.'},
-  rapid:{name:'Accelerator',description:'All guns fire 20% faster.'},
+  rapid:{name:'Accelerator',description:'Gun cooldowns −20%.'},
   wing:{name:'Wing drones',description:'Two orbiting drones fire free support shots.'},
   shield:{name:'Aegis matrix',description:'Shield recovery +14/s; refill the shield.'},
 });

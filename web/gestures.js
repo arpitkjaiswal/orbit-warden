@@ -1,4 +1,4 @@
-import {classifyHand, HandSteering, PoseFilter} from './gesture-logic.js';
+import {classifyHand, validLandmarks, HandSteering, PoseFilter} from './gesture-logic.js';
 /** Webcam-only, opt-in gesture tracking via MediaPipe Tasks Vision.
  * No images are uploaded by this application. MediaPipe may make its own telemetry requests.
  * User-provided trained classifiers have not been bundled.
@@ -7,8 +7,18 @@ const CDN = 'https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@1.2.0';
 const DEFAULT_MODEL = 'https://storage.googleapis.com/mediapipe-models/hand_landmarker/hand_landmarker/float16/1/hand_landmarker.task';
 const SEGMENTS = [[0,1],[1,2],[2,3],[3,4],[0,5],[5,6],[6,7],[7,8],[5,9],[9,10],[10,11],[11,12],[9,13],[13,14],[14,15],[15,16],[13,17],[17,18],[18,19],[19,20],[0,17]];
 
+async function createLandmarker(){
+  const {FilesetResolver,HandLandmarker}=await import(`${CDN}/+esm`);
+  const vision=await FilesetResolver.forVisionTasks(`${CDN}/wasm`);
+  return HandLandmarker.createFromOptions(vision,{
+    baseOptions:{modelAssetPath:DEFAULT_MODEL,delegate:'CPU'},runningMode:'VIDEO',numHands:1,
+    minHandDetectionConfidence:.6,minTrackingConfidence:.6,
+  });
+}
+
 export class GestureTracker {
-  constructor({ video, overlay, placeholder, button, label, confidence, status, feedLabel }) {
+  constructor({ video, overlay, placeholder, button, label, confidence, status, feedLabel, onFailure=()=>{}, createDetector=createLandmarker }) {
+    this.onFailure=onFailure;this.createDetector=createDetector;
     this.video = video;
     this.overlay = overlay;
     this.ctx = overlay.getContext('2d');
@@ -41,8 +51,9 @@ export class GestureTracker {
   async toggle() { if (this.enabled || this.loading) this.disable(); else await this.enable(); }
 
   async enable() {
+    if(this.loading||this.enabled)return;
     if (!navigator.mediaDevices?.getUserMedia) {
-      this.statusEl.textContent = 'Camera permission requires HTTPS or localhost, and a supported browser.';
+      this.fail('Camera permission requires HTTPS or localhost, and a supported browser.');
       return;
     }
     this.loading = true;
@@ -54,19 +65,12 @@ export class GestureTracker {
       const stream = await navigator.mediaDevices.getUserMedia({video: {width: 640, height: 360, facingMode: 'user'}, audio: false});
       if (generation !== this.generation) {stream.getTracks().forEach(track=>track.stop());return;}
       this.stream=stream;
-      stream.getVideoTracks()[0]?.addEventListener('ended',()=>{if(this.stream===stream)this.disable();});
+      stream.getVideoTracks()[0]?.addEventListener('ended',()=>{if(this.stream===stream)this.fail('The camera stream ended.');});
       this.video.srcObject = stream;
       await this.video.play();
       if (generation !== this.generation) return;
-      const {FilesetResolver, HandLandmarker} = await import(`${CDN}/+esm`);
-      const vision = await FilesetResolver.forVisionTasks(`${CDN}/wasm`);
-      const landmarker = await HandLandmarker.createFromOptions(vision, {
-        baseOptions: {modelAssetPath: DEFAULT_MODEL, delegate: 'CPU'},
-        runningMode: 'VIDEO',
-        numHands: 1,
-        minHandDetectionConfidence: 0.6,
-        minTrackingConfidence: 0.6,
-      });
+      this.syncOverlaySize();
+      const landmarker=await this.createDetector();
       if (generation !== this.generation) {landmarker.close();return;}
       this.landmarker=landmarker;
       this.lastVideoTime=-1;this.lastInference=0;this.lastHandsSeen=0;
@@ -74,13 +78,23 @@ export class GestureTracker {
       this.placeholder.classList.add('hidden');
       this.feedLabelEl.textContent = 'LIVE · ON DEVICE';
       this.button.innerHTML = 'DISABLE CAMERA CONTROL <span>×</span>';
-      this.statusEl.textContent = 'Hand moves ship in 2D. Auto-fire assists steering. Fist: shield; palm: recharge; pinch: overdrive; hold peace sign: nova.';
+      this.statusEl.textContent = 'Camera ready. Center your hand; choose Relaxed or Free flight under Tune controls. Fist: shield; palm: recharge; pinch: overdrive; peace sign: nova; three fingers: missiles.';
     } catch (err) {
       if(generation!==this.generation)return;
-      this.disable();
-      this.statusEl.textContent = `Camera unavailable: ${err?.message || 'permission denied or model unavailable'}`;
+      this.fail(`Camera unavailable: ${err?.message || 'permission denied or model unavailable'}`);
     } finally {
       if(generation===this.generation || !this.loading){this.loading = false;this.button.disabled = false;}
+    }
+  }
+
+  fail(message){
+    this.disable();this.statusEl.textContent=message;this.onFailure(message);
+  }
+
+  syncOverlaySize(){
+    const width=this.video.videoWidth,height=this.video.videoHeight;
+    if(width>0&&height>0&&(this.overlay.width!==width||this.overlay.height!==height)){
+      this.overlay.width=width;this.overlay.height=height;
     }
   }
 
@@ -112,6 +126,7 @@ export class GestureTracker {
     this.tracking=false;this.label='none';this.history=[];this.confidence=0;
     this.poseFilter.reset();
     this.labelEl.textContent='NO HAND';this.confidenceEl.textContent='—';
+    if(this.enabled)this.feedLabelEl.textContent='NO HAND · POWERS SAFE';
     this.ctx.clearRect(0,0,this.overlay.width,this.overlay.height);
   }
 
@@ -140,9 +155,10 @@ export class GestureTracker {
     this.lastInference = now;
     let hands;
     try { hands = this.landmarker.detectForVideo(this.video, now).landmarks; }
-    catch (err) {this.disable();this.statusEl.textContent = `Tracking error: ${err.message}. Use keyboard or retry camera.`; return;}
+    catch (err) {this.fail(`Tracking error: ${err.message}. Use keyboard or retry camera.`); return;}
     const points = hands?.[0];
-    if (!points) {
+    this.syncOverlaySize();
+    if (!validLandmarks(points)) {
       this.releaseHand();
       this.feedLabelEl.textContent='NO HAND · POWERS SAFE';
       this.ctx.clearRect(0, 0, this.overlay.width, this.overlay.height);
